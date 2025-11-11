@@ -76,10 +76,9 @@ if not df.empty:
     # ----------------------
     # Limit to last 24 hours: 08:00 previous day → 08:00 last day
     # ----------------------
-    last_datetime = df["DateTime"].max()
-    end_time = last_datetime.replace(hour=8, minute=0, second=0, microsecond=0)
-    if last_datetime < end_time:
-        end_time = last_datetime
+    # Ensure last 24h period is 08:00 previous day → 08:00 today
+    last_date = df["DateTime"].dt.date.max()
+    end_time = datetime.combine(last_date, datetime.min.time()) + timedelta(hours=8)  # 08:00 today
     start_time = end_time - timedelta(hours=24)
 
     df_24h = df[(df["DateTime"] >= start_time) & (df["DateTime"] <= end_time)].copy()
@@ -179,6 +178,7 @@ if not df.empty:
 
 else:
     st.info("⬆️ Please upload a CSV file or fill in temperatures manually to begin analysis.")
+
 
 
 
