@@ -33,14 +33,27 @@ df = pd.DataFrame(columns=["Date", "Time", "Temperature"])
 if input_method == "Upload CSV file":
     uploaded_file = st.file_uploader("Upload CSV with columns: Date, Time, Temperature", type=["csv"])
     if uploaded_file is not None:
-        df = pd.read_csv(uploaded_file)
-        df.columns = ["Date", "Time", "Temperature"][:len(df.columns)]
-        df.columns = [c.strip() for c in df.columns]
-        df["DateTime"] = df.apply(
-            lambda row: datetime.strptime(str(int(row["Date"])) + f"{int(row['Time']):04d}", "%Y%m%d%H%M"),
-            axis=1
-        )
-        df = df.sort_values("DateTime").reset_index(drop=True)
+        try:
+            df = pd.read_csv(uploaded_file)
+            df.columns = ["Date", "Time", "Temperature"][:len(df.columns)]
+            df.columns = [c.strip() for c in df.columns]
+
+            # 嘗試轉換資料，若有錯誤則刪除該筆
+            def safe_parse_datetime(row):
+                try:
+                    return datetime.strptime(str(int(row["Date"])) + f"{int(row['Time']):04d}", "%Y%m%d%H%M")
+                except Exception:
+                    return np.nan
+
+            df["DateTime"] = df.apply(safe_parse_datetime, axis=1)
+            df = df.dropna(subset=["DateTime", "Temperature"])  # 移除時間或溫度無效者
+            df = df[pd.to_numeric(df["Temperature"], errors="coerce").notnull()]  # 移除非數字溫度
+            df["Temperature"] = df["Temperature"].astype(float)
+            df = df.sort_values("DateTime").reset_index(drop=True)
+
+        except Exception as e:
+            st.error(f"Error reading CSV: {e}")
+            df = pd.DataFrame(columns=["Date", "Time", "Temperature"])
 
 # ----------------------
 # Manual Entry as Editable DataFrame
@@ -48,7 +61,6 @@ if input_method == "Upload CSV file":
 elif input_method == "Manual Entry":
     st.subheader("Manual Data Entry (editable table)")
     
-    # Default times: 08:00 Day1 → 07:00 Day2
     day1_times = [f"{h:02d}:00" for h in range(8,24)]
     day2_times = [f"{h:02d}:00" for h in range(0,8)]
     all_times = [("Day1", t) for t in day1_times] + [("Day2", t) for t in day2_times]
@@ -57,28 +69,22 @@ elif input_method == "Manual Entry":
     manual_df["Temperature"] = np.nan
 
     edited_df = st.data_editor(manual_df, num_rows="dynamic", use_container_width=True)
-
-    # Remove empty temperature rows
     edited_df = edited_df.dropna(subset=["Temperature"])
     if not edited_df.empty:
         df = edited_df.copy()
-        # Map Day1/Day2 to datetime
         base_date = datetime.today().replace(hour=0, minute=0, second=0, microsecond=0)
-        df["DateTime"] = df.apply(lambda row: base_date + timedelta(days=int(row["Date"][-1])-1,
-                                                                hours=int(row["Time"][:2]),
-                                                                minutes=int(row["Time"][3:])), axis=1)
+        df["DateTime"] = df.apply(
+            lambda row: base_date + timedelta(days=int(row["Date"][-1])-1,
+                                              hours=int(row["Time"][:2]),
+                                              minutes=int(row["Time"][3:])), axis=1)
         df = df.sort_values("DateTime").reset_index(drop=True)
 
 # ----------------------
 # Only proceed if dataframe not empty
 # ----------------------
 if not df.empty:
-    # ----------------------
-    # Limit to last 24 hours: 08:00 previous day → 08:00 last day
-    # ----------------------
-    # Ensure last 24h period is 08:00 previous day → 08:00 today
     last_date = df["DateTime"].dt.date.max()
-    end_time = datetime.combine(last_date, datetime.min.time()) + timedelta(hours=8)  # 08:00 today
+    end_time = datetime.combine(last_date, datetime.min.time()) + timedelta(hours=8)
     start_time = end_time - timedelta(hours=24)
 
     df_24h = df[(df["DateTime"] >= start_time) & (df["DateTime"] <= end_time)].copy()
@@ -87,10 +93,7 @@ if not df.empty:
     if df_24h.empty:
         st.warning("No data available in the last 24 hours (08:00 → 08:00).")
     else:
-        # ----------------------
-        # Feature Engineering (raw features only from last 24h)
-        # ----------------------
-        df_24h["Hours"] = (df_24h["DateTime"] - df_24h["DateTime"].min()).dt.total_seconds()/3600
+        df_24h["Hours"] = (df_24h["DateTime"] - df_24h["DateTime"].min()).dt.total_seconds() / 3600
 
         max_bt = df_24h["Temperature"].max()
         min_bt = df_24h["Temperature"].min()
@@ -107,38 +110,18 @@ if not df.empty:
         diff_last8_allmax = max_last8 - max_bt
 
         features = [max_bt, min_bt, mean_bt, std_bt, slope, range_bt, max_last8, diff_last8_allmax]
-        feature_names = [
-            "Maximum (max)", "Minimum (min)", "Average (mean)", "Standard Deviation (std)",
-            "Slope", "Max - Min", "Max of Last 8 Hours", "Last 8h Max - Overall Max"
-        ]
 
-        # ----------------------
-        # Display Raw Features (last 24h only)
-        # ----------------------
-        st.subheader("🧮 Raw Features (Last 24h)")
-        st.dataframe(pd.DataFrame([features], columns=feature_names))
-
-        # ----------------------
-        # Load scaler & display scaled features
-        # ----------------------
         try:
             scaler = joblib.load("scaler.pkl")
             svm_model = joblib.load("svm_model.pkl")
             features_scaled = scaler.transform(np.array(features).reshape(1,-1))
-
-            st.subheader("🔹 Scaled Features")
-            st.dataframe(pd.DataFrame(features_scaled, columns=feature_names))
-
-            # ----------------------
-            # Prediction
-            # ----------------------
-            st.subheader("🤖 Prediction Result")
             if hasattr(svm_model, "predict_proba"):
                 pred_prob = svm_model.predict_proba(features_scaled)[0][1]
             else:
                 pred_prob = svm_model.decision_function(features_scaled)[0]
 
             threshold = 0.5
+            st.subheader("🤖 Prediction Result")
             if pred_prob >= threshold:
                 st.success(f"Prediction: Fever likely (Score/Probability={pred_prob:.3f} ≥ {threshold})")
             else:
@@ -156,13 +139,6 @@ if not df.empty:
         st.dataframe(df_24h)
 
         # ----------------------
-        # Statistical Summary
-        # ----------------------
-        st.subheader("📊 Statistical Summary (Last 24h)")
-        features_values = [max_bt, min_bt, mean_bt, std_bt, slope, range_bt, max_last8, diff_last8_allmax]
-        st.table(pd.DataFrame({"Feature": feature_names, "Value":[f"{v:.4f}" for v in features_values]}))
-
-        # ----------------------
         # Temperature Trend Plot
         # ----------------------
         st.subheader("📉 Temperature Trend (Last 24h)")
@@ -172,6 +148,7 @@ if not df.empty:
         ax.set_ylim(35, 43)
         ax.set_xlabel("Time")
         ax.set_ylabel("Temperature (°C)")
+        plt.xticks(rotation=45, ha='right')  # 逆時針45度顯示時間
         ax.grid(True)
         ax.legend()
         st.pyplot(fig)
