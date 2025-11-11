@@ -9,7 +9,7 @@ import joblib
 # ---------------------------------------------------
 # Title & Introduction
 # ---------------------------------------------------
-st.title("📈 Fever Prediction Model in Children")
+st.title("📈 Body Temperature Analysis Tool (CSV Upload / Manual Entry + Normalization + Prediction)")
 
 st.markdown("""
 **App Description:**  
@@ -18,6 +18,9 @@ to predict whether a fever may occur in the coming days.
 
 **Input Options:**  
 1. Upload a CSV file with three columns: `Date`, `Time`, `Temperature`  
+   - `Date`: YYYYMMDD  
+   - `Time`: HHMM  
+   - `Temperature`: Celsius  
 2. Manual entry: edit temperatures directly in the table below.
 """)
 
@@ -43,22 +46,22 @@ if input_method == "Upload CSV file":
         df = df.sort_values("DateTime").reset_index(drop=True)
 
 # ----------------------
-# Manual Entry as DataFrame
+# Manual Entry as Editable DataFrame
 # ----------------------
 elif input_method == "Manual Entry":
     st.subheader("Manual Data Entry (editable table)")
-
-    # Create all time points from 08:00 Day1 → 07:00 Day2
+    
+    # Generate all time points 08:00 Day1 → 07:00 Day2
     day1_times = [f"{h:02d}:00" for h in range(8,24)]
     day2_times = [f"{h:02d}:00" for h in range(0,8)]
     all_times = [("Day1", t) for t in day1_times] + [("Day2", t) for t in day2_times]
-
+    
     manual_df = pd.DataFrame(all_times, columns=["Date", "Time"])
-    manual_df["Temperature"] = np.nan  # empty temperature column
-
+    manual_df["Temperature"] = np.nan
+    
     # Editable table
     edited_df = st.data_editor(manual_df, num_rows="dynamic", use_container_width=True)
-
+    
     # Remove empty temperature rows
     edited_df = edited_df.dropna(subset=["Temperature"])
     if not edited_df.empty:
@@ -75,33 +78,53 @@ elif input_method == "Manual Entry":
 # ----------------------
 if not df.empty:
     # ----------------------
-    # Prediction
+    # Feature Engineering
     # ----------------------
-    st.subheader("🤖 Prediction Result")
+    df["Hours"] = (df["DateTime"] - df["DateTime"].min()).dt.total_seconds()/3600
+
+    max_bt = df["Temperature"].max()
+    min_bt = df["Temperature"].min()
+    mean_bt = df["Temperature"].mean()
+    std_bt = df["Temperature"].std()
+    X = df["Hours"].values.reshape(-1,1)
+    y = df["Temperature"].values
+    model_lr = LinearRegression().fit(X,y)
+    slope = model_lr.coef_[0]
+    last_time = df["Hours"].max()
+    last_8h = df[df["Hours"] >= last_time-8]
+    max_last8 = last_8h["Temperature"].max()
+    range_bt = max_bt - min_bt
+    diff_last8_allmax = max_last8 - max_bt
+
+    features = [max_bt, min_bt, mean_bt, std_bt, slope, range_bt, max_last8, diff_last8_allmax]
+    feature_names = [
+        "Maximum (max)", "Minimum (min)", "Average (mean)", "Standard Deviation (std)",
+        "Slope", "Max - Min", "Max of Last 8 Hours", "Last 8h Max - Overall Max"
+    ]
+
+    # ----------------------
+    # Display Raw Features
+    # ----------------------
+    st.subheader("🧮 Raw Features")
+    raw_df = pd.DataFrame([features], columns=feature_names)
+    st.dataframe(raw_df)
+
+    # ----------------------
+    # Load scaler & display scaled features
+    # ----------------------
     try:
-        df["Hours"] = (df["DateTime"] - df["DateTime"].min()).dt.total_seconds()/3600
-
-        max_bt = df["Temperature"].max()
-        min_bt = df["Temperature"].min()
-        mean_bt = df["Temperature"].mean()
-        std_bt = df["Temperature"].std()
-        X = df["Hours"].values.reshape(-1,1)
-        y = df["Temperature"].values
-        model_lr = LinearRegression().fit(X,y)
-        slope = model_lr.coef_[0]
-        last_time = df["Hours"].max()
-        last_8h = df[df["Hours"] >= last_time-8]
-        max_last8 = last_8h["Temperature"].max()
-        range_bt = max_bt - min_bt
-        diff_last8_allmax = max_last8 - max_bt
-
-        features = [max_bt, min_bt, mean_bt, std_bt, slope, range_bt, max_last8, diff_last8_allmax]
-
-        # Load models
         scaler = joblib.load("scaler.pkl")
         svm_model = joblib.load("svm_model.pkl")
         features_scaled = scaler.transform(np.array(features).reshape(1,-1))
-
+        
+        st.subheader("🔹 Scaled Features")
+        scaled_df = pd.DataFrame(features_scaled, columns=feature_names)
+        st.dataframe(scaled_df)
+        
+        # ----------------------
+        # Prediction
+        # ----------------------
+        st.subheader("🤖 Prediction Result")
         if hasattr(svm_model, "predict_proba"):
             pred_prob = svm_model.predict_proba(features_scaled)[0][1]
         else:
@@ -109,14 +132,14 @@ if not df.empty:
 
         threshold = 0.5
         if pred_prob >= threshold:
-            st.success(f"Prediction: Fever expected in the coming day (Score/Probability={pred_prob:.3f} ≥ {threshold})")
+            st.success(f"Prediction: Fever likely (Score/Probability={pred_prob:.3f} ≥ {threshold})")
         else:
-            st.info(f"Prediction: No fever expected in the coming day (Score/Probability={pred_prob:.3f} < {threshold})")
+            st.info(f"Prediction: No fever expected (Score/Probability={pred_prob:.3f} < {threshold})")
 
     except FileNotFoundError as e:
         st.error(f"Missing model file: {e.filename}")
     except Exception as e:
-        st.error(f"Error during prediction: {e}")
+        st.error(f"Error loading scaler or model: {e}")
 
     # ----------------------
     # Data Preview
@@ -128,10 +151,6 @@ if not df.empty:
     # Statistical Summary
     # ----------------------
     st.subheader("📊 Statistical Summary")
-    feature_names = [
-        "Maximum (max)", "Minimum (min)", "Average (mean)", "Standard Deviation (std)",
-        "Slope", "Max - Min", "Max of Last 8 Hours", "Last 8h Max - Overall Max"
-    ]
     features_values = [max_bt, min_bt, mean_bt, std_bt, slope, range_bt, max_last8, diff_last8_allmax]
     result_table = pd.DataFrame({"Feature": feature_names, "Value":[f"{v:.4f}" for v in features_values]})
     st.table(result_table)
@@ -152,6 +171,7 @@ if not df.empty:
 
 else:
     st.info("⬆️ Please upload a CSV file or fill in temperatures manually to begin analysis.")
+
 
 
 
