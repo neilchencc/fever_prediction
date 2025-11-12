@@ -178,12 +178,22 @@ if not df.empty:
         except Exception as e:
             st.error(f"Error loading scaler or model: {e}")
 
-        # ---------------------- Data Preview ----------------------
+        # ---------------------- Data Preview with Red Highlight ----------------------
         st.subheader("🧾 Data Preview (Last 24h)")
         df_preview = df_24h.copy()
         df_preview["Date"] = df_preview["DateTime"].dt.strftime("%Y-%m-%d")
         df_preview["Time"] = df_preview["DateTime"].dt.strftime("%H:%M")
-        st.dataframe(df_preview[["Date", "Time", "Temperature"]])
+
+        # 樣式函數：體溫 <35 或 >43 用紅字
+        def highlight_temp(val):
+            try:
+                if float(val) < 35 or float(val) > 43:
+                    return 'color: red; font-weight: bold'
+            except:
+                pass
+            return ''
+
+        st.dataframe(df_preview[["Date", "Time", "Temperature"]].style.applymap(highlight_temp))
 
         # ---------------------- Temperature Trend ----------------------
         st.subheader("📉 Temperature Trend (Last 24h)")
