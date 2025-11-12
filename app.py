@@ -9,8 +9,6 @@ from sklearn.svm import SVC
 import joblib
 from dateutil import parser
 
-st.set_option('deprecation.showPyplotGlobalUse', False)
-
 # -----------------------
 # Title & Introduction
 # -----------------------
@@ -192,8 +190,6 @@ if not df.empty:
             joblib.dump(scaler, "scaler.pkl")
             joblib.dump(svm_model, "svm_model.pkl")
             st.success("Model retrained and saved successfully! ✅")
-
-
 
 
 
