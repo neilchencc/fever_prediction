@@ -179,16 +179,21 @@ if not df.empty:
             training_df = pd.concat([training_df, new_row_df], ignore_index=True)
             training_df.to_csv("training_data.csv", index=False)
 
-            # Retrain model
+            # Retrain model only if there are at least 2 classes
             X_train = training_df.iloc[:,:-1].values
             y_train = training_df['label'].values
-            scaler = StandardScaler()
-            X_train_scaled = scaler.fit_transform(X_train)
-            svm_model = SVC(probability=True)
-            svm_model.fit(X_train_scaled, y_train)
-            joblib.dump(scaler, "scaler.pkl")
-            joblib.dump(svm_model, "svm_model.pkl")
-            st.success("Model retrained and saved successfully! ✅")
+
+            if len(np.unique(y_train)) < 2:
+                st.warning("Not enough class diversity to retrain model. Need both 0 and 1 labels.")
+            else:
+                scaler = StandardScaler()
+                X_train_scaled = scaler.fit_transform(X_train)
+                svm_model = SVC(probability=True)
+                svm_model.fit(X_train_scaled, y_train)
+                joblib.dump(scaler, "scaler.pkl")
+                joblib.dump(svm_model, "svm_model.pkl")
+                st.success("Model retrained and saved successfully! ✅")
+
 
 
 
