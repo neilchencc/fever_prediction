@@ -174,10 +174,9 @@ if not df.empty:
             except:
                 training_df = pd.DataFrame(columns=[*['max_bt','min_bt','mean_bt','std_bt','slope','range_bt','max_last8','diff_last8_allmax'], 'label'])
             
-            # Add new data
-            new_row = dict(zip(['max_bt','min_bt','mean_bt','std_bt','slope','range_bt','max_last8','diff_last8_allmax'], features))
-            new_row['label'] = correct_label
-            training_df = training_df.append(new_row, ignore_index=True)
+            # Add new data using pd.concat
+            new_row_df = pd.DataFrame([dict(zip(['max_bt','min_bt','mean_bt','std_bt','slope','range_bt','max_last8','diff_last8_allmax'], features), **{'label': correct_label})])
+            training_df = pd.concat([training_df, new_row_df], ignore_index=True)
             training_df.to_csv("training_data.csv", index=False)
 
             # Retrain model
