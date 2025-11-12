@@ -58,6 +58,10 @@ if input_method == "Upload CSV file":
         df.columns = ["Date", "Time", "Temperature"][:len(df.columns)]
         df.columns = [c.strip() for c in df.columns]
         try:
+            # 清理欄位格式
+            df["Date"] = df["Date"].astype(str).str.replace(r"\.0$", "", regex=True).str.strip()
+            df["Time"] = df["Time"].astype(str).str.replace(r"\.0$", "", regex=True).str.strip()
+
             df["DateTime"] = df.apply(lambda row: parse_datetime(row["Date"], row["Time"]), axis=1)
             df = df.sort_values("DateTime").reset_index(drop=True)
         except Exception as e:
@@ -179,6 +183,7 @@ if not df.empty:
 
 else:
     st.info("⬆️ Please upload a CSV file or fill in temperatures manually to begin analysis.")
+
 
 
 
