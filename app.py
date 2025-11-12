@@ -6,6 +6,7 @@ from datetime import datetime, timedelta
 from sklearn.linear_model import LinearRegression
 import joblib
 from dateutil import parser
+import chardet  # 用於自動偵測編碼
 
 # ---------------------------------------------------
 # Title & Introduction
@@ -18,7 +19,7 @@ This app uses historical body temperature records from **08:00 of the previous d
 to predict whether a fever may occur in the coming days.
 
 **Input Options:**  
-1. Upload a CSV file (any column names, first 3 columns will be used as `Date`, `Time`, `Temperature`)  
+1. Upload a CSV file with three columns: `Date`, `Time`, `Temperature`  
 2. Manual entry: edit temperatures directly in the table below.
 
 **Note:**  
@@ -37,52 +38,53 @@ df = pd.DataFrame(columns=["Date", "Time", "Temperature"])
 # ----------------------
 def parse_datetime(date_str, time_str):
     time_str = str(time_str).strip()
+
     if time_str in ["", "nan", "NaN"]:
         time_str = "00:00"
     elif time_str.isdigit():
         time_str = time_str.zfill(4)
         time_str = time_str[:2] + ":" + time_str[2:]
+
     try:
         dt_date = parser.parse(str(date_str), dayfirst=False, fuzzy=True)
     except Exception:
         raise ValueError(f"Unrecognized date format: {date_str}")
+
     try:
         dt_time = parser.parse(time_str, fuzzy=True).time()
     except Exception:
         raise ValueError(f"Unrecognized time format: {time_str}")
+
     return datetime.combine(dt_date.date(), dt_time)
 
 # ----------------------
 # CSV Upload
 # ----------------------
 if input_method == "Upload CSV file":
-    uploaded_file = st.file_uploader("Upload CSV", type=["csv"])
+    uploaded_file = st.file_uploader("Upload CSV with columns: Date, Time, Temperature", type=["csv"])
     if uploaded_file is not None:
-        # 讀取 CSV（含中文）
+        # 自動偵測編碼
+        raw_bytes = uploaded_file.read()
+        encoding = chardet.detect(raw_bytes)['encoding']
+        uploaded_file.seek(0)  # 重置指針
         try:
-            df = pd.read_csv(uploaded_file, encoding='utf-8', engine='python')
-        except Exception:
-            df = pd.read_csv(uploaded_file, encoding='gbk', engine='python')
-        
-        if df.shape[1] < 3:
-            st.error("CSV 必須至少有三欄 (Date, Time, Temperature)。")
+            df = pd.read_csv(uploaded_file, encoding=encoding)
+        except Exception as e:
+            st.error(f"CSV 讀取錯誤: {e}")
             df = pd.DataFrame(columns=["Date", "Time", "Temperature"])
-        else:
+
+        # 只保留前三欄並改名
+        if not df.empty:
             df = df.iloc[:, :3]
             df.columns = ["Date", "Time", "Temperature"]
-
-        # 移除空值行
-        df = df.dropna(subset=["Temperature"]).reset_index(drop=True)
-
-        # 轉換 Date/Time
-        try:
             df["Date"] = df["Date"].astype(str).str.replace(r"\.0$", "", regex=True).str.strip()
             df["Time"] = df["Time"].astype(str).str.replace(r"\.0$", "", regex=True).str.strip()
-            df["DateTime"] = df.apply(lambda row: parse_datetime(row["Date"], row["Time"]), axis=1)
-            df = df.sort_values("DateTime").reset_index(drop=True)
-        except Exception as e:
-            st.error(f"Date/Time parsing error: {e}")
-            df = pd.DataFrame(columns=["Date", "Time", "Temperature", "DateTime"])
+            try:
+                df["DateTime"] = df.apply(lambda row: parse_datetime(row["Date"], row["Time"]), axis=1)
+                df = df.sort_values("DateTime").reset_index(drop=True)
+            except Exception as e:
+                st.error(f"Date/Time parsing error: {e}")
+                df = pd.DataFrame(columns=["Date", "Time", "Temperature", "DateTime"])
 
 # ----------------------
 # Manual Entry
@@ -127,20 +129,18 @@ if not df.empty:
         min_bt = df_24h["Temperature"].min()
         mean_bt = df_24h["Temperature"].mean()
         std_bt = df_24h["Temperature"].std()
+
         X = df_24h["Hours"].values.reshape(-1,1)
         y = df_24h["Temperature"].values
         slope = LinearRegression().fit(X, y).coef_[0]
+
         last_time = df_24h["Hours"].max()
         last_8h = df_24h[df_24h["Hours"] >= last_time-8]
         max_last8 = last_8h["Temperature"].max()
         range_bt = max_bt - min_bt
         diff_last8_allmax = max_last8 - max_bt
-        features = [max_bt, min_bt, mean_bt, std_bt, slope, range_bt, max_last8, diff_last8_allmax]
 
-        feature_names = [
-            "Maximum (max)", "Minimum (min)", "Average (mean)", "Standard Deviation (std)",
-            "Slope", "Max - Min", "Max of Last 8 Hours", "Last 8h Max - Overall Max"
-        ]
+        features = [max_bt, min_bt, mean_bt, std_bt, slope, range_bt, max_last8, diff_last8_allmax]
 
         # ---------------------- Model Prediction ----------------------
         try:
@@ -185,8 +185,9 @@ if not df.empty:
         plt.xticks(rotation=45, ha='left')
         st.pyplot(fig)
 
-else:
+else: 
     st.info("⬆️ Please upload a CSV file or fill in temperatures manually to begin analysis.")
+
 
 
 
