@@ -36,16 +36,13 @@ df = pd.DataFrame(columns=["Date", "Time", "Temperature"])
 # Helper Function for Robust Date/Time Parsing
 # ----------------------
 def parse_datetime(date_str, time_str):
-    # Convert to string and strip whitespace
     time_str = str(time_str).strip()
 
-    # Handle empty or invalid times
     if time_str in ["", "nan", "NaN"]:
         time_str = "00:00"
-    # Handle numeric inputs like 0, 5, 130, 900, 1230
     elif time_str.isdigit():
-        time_str = time_str.zfill(4)  # pad to 4 digits
-        time_str = time_str[:2] + ":" + time_str[2:]  # e.g., '0' -> '00:00', '5' -> '00:05', '130' -> '01:30'
+        time_str = time_str.zfill(4)
+        time_str = time_str[:2] + ":" + time_str[2:]
 
     try:
         dt_date = parser.parse(str(date_str), dayfirst=False, fuzzy=True)
@@ -160,19 +157,9 @@ if not df.empty:
         # ---------------------- Data Preview ----------------------
         st.subheader("🧾 Data Preview (Last 24h)")
         df_preview = df_24h.copy()
-        df_preview["Time"] = df_preview["DateTime"].dt.strftime("%H:%M")  # HH:MM format
-        st.dataframe(df_preview[["Time", "Temperature"]])
-
-        # ---------------------- Statistical Summary ----------------------
-        feature_names = [
-            "Maximum (max)", "Minimum (min)", "Average (mean)", "Standard Deviation (std)",
-            "Slope", "Max - Min", "Max of Last 8 Hours", "Last 8h Max - Overall Max"
-        ]
-        st.subheader("📊 Statistical Summary (Last 24h)")
-        st.table(pd.DataFrame({
-            "Feature": feature_names,
-            "Value": [f"{v:.4f}" for v in features]
-        }))
+        df_preview["Date"] = df_preview["DateTime"].dt.strftime("%Y-%m-%d")  # Keep date
+        df_preview["Time"] = df_preview["DateTime"].dt.strftime("%H:%M")     # HH:MM
+        st.dataframe(df_preview[["Date", "Time", "Temperature"]])
 
         # ---------------------- Temperature Trend ----------------------
         st.subheader("📉 Temperature Trend (Last 24h)")
@@ -189,6 +176,8 @@ if not df.empty:
 
 else: 
     st.info("⬆️ Please upload a CSV file or fill in temperatures manually to begin analysis.")
+
+
 
 
 
