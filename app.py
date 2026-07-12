@@ -23,10 +23,10 @@ to predict whether a fever may occur in the coming days.
 2. Manual entry: edit temperatures directly in the table below.
 
 **Note:**  
-Date formats can be `20251110`, `2025/11/10`, `Nov 10, 2025`, `2025-11-10`, or `11/10`.  
-Time formats can be `17:00`, `05:00 pm`, `1700`, `0`, `5`, `130`, etc.
-(1) The interval between any two consecutive temperature measurements did not exceed 8 hours.
-(2) The interval between the first and last temperature measurements was at least 19 hours. 
+(1) Date formats can be `20251110`, `2025/11/10`, `Nov 10, 2025`, `2025-11-10`, or `11/10`.  
+(2) Time formats can be `17:00`, `05:00 pm`, `1700`, `0`, `5`, `130`, etc.
+(3) The interval between any two consecutive temperature measurements did not exceed 8 hours.
+(4) The interval between the first and last temperature measurements was at least 19 hours. 
 """)
 
 # ----------------------
