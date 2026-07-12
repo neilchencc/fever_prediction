@@ -29,8 +29,8 @@ to predict whether a fever may occur in the coming days.
 (4) The interval between the first and last temperature measurements was at least 19 hours. 
 
 **Disclaimer:**  
-The prediction results provided by this app are for research and informational purposes only.  
-They should not be considered as medical advice, diagnosis, or a substitute for professional medical judgment.  
+The prediction results provided by this app are for research and informational purposes only.
+They should not be considered as medical advice, diagnosis, or a substitute for professional medical judgment. 
 Clinical decisions should always be made by qualified healthcare professionals based on comprehensive clinical evaluation.
 """)
 
