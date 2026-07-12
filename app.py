@@ -27,6 +27,11 @@ to predict whether a fever may occur in the coming days.
 (2) Time formats can be `17:00`, `05:00 pm`, `1700`, `0`, `5`, `130`, etc.  
 (3) The interval between any two consecutive temperature measurements did not exceed 8 hours.  
 (4) The interval between the first and last temperature measurements was at least 19 hours. 
+
+**Disclaimer:**  
+The prediction results provided by this app are for research and informational purposes only.  
+They should not be considered as medical advice, diagnosis, or a substitute for professional medical judgment.  
+Clinical decisions should always be made by qualified healthcare professionals based on comprehensive clinical evaluation.
 """)
 
 # ----------------------
