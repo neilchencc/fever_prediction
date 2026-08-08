@@ -30,33 +30,44 @@ Clinical decisions should always be made by qualified healthcare professionals b
 """)
 
 # ----------------------
-# Manual Entry (24 小時完整展開)
+# Manual Entry (表格式、無卷軸)
 # ----------------------
-st.subheader("Manual Data Entry (24 hours, no scroll)")
+st.subheader("Manual Data Entry (24 hours, table-like, no scroll)")
 
-# Day1: 前一天 08:00–23:00
 day1_times = [f"{h:02d}:00" for h in range(8,24)]
-# Day2: 當天 00:00–07:00
 day2_times = [f"{h:02d}:00" for h in range(0,8)]
-
 all_times = [("Day1", t) for t in day1_times] + [("Day2", t) for t in day2_times]
+
+# 建立表格標題
+col1, col2, col3 = st.columns([1,1,2])
+with col1:
+    st.markdown("**Day**")
+with col2:
+    st.markdown("**Time**")
+with col3:
+    st.markdown("**Temperature (°C)**")
 
 records = []
 
+# 逐列顯示，不使用卷軸
 for day, t in all_times:
-    temp = st.number_input(
-        f"{day} — {t}",
-        min_value=30.0,
-        max_value=45.0,
-        step=0.1,
-        format="%.1f",
-        key=f"{day}_{t}"
-    )
+    col1, col2, col3 = st.columns([1,1,2])
+    with col1:
+        st.write(day)
+    with col2:
+        st.write(t)
+    with col3:
+        temp = st.number_input(
+            "",
+            min_value=30.0,
+            max_value=45.0,
+            step=0.1,
+            format="%.1f",
+            key=f"{day}_{t}"
+        )
     records.append((day, t, temp))
 
 df = pd.DataFrame(records, columns=["Day", "Time", "Temperature"])
-
-# 移除未填寫的欄位（避免 NaN）
 df = df.dropna(subset=["Temperature"])
 
 if not df.empty:
@@ -66,7 +77,6 @@ if not df.empty:
     ) + timedelta(hours=int(row["Time"][:2]), minutes=int(row["Time"][3:])), axis=1)
 
     df = df.sort_values("DateTime").reset_index(drop=True)
-
 
 # ----------------------
 # Proceed if Data Exists
