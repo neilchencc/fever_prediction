@@ -6,6 +6,8 @@ from datetime import datetime, timedelta
 from sklearn.linear_model import LinearRegression
 import joblib
 
+pip install streamlit-aggrid
+
 # ---------------------------------------------------
 # Title & Introduction
 # ---------------------------------------------------
@@ -31,50 +33,44 @@ Clinical decisions should always be made by qualified healthcare professionals b
 
 
 # ----------------------
-# Manual Entry (真正表格、可直接輸入、無卷軸)
+# Manual Entry (AgGrid：漂亮、可直接輸入、無卷軸)
 # ----------------------
-st.subheader("Manual Data Entry (24 hours, full table, no scroll)")
+from st_aggrid import AgGrid, GridOptionsBuilder
+
+st.subheader("Manual Data Entry (24 hours, Excel-like table, no scroll)")
 
 day1_times = [f"{h:02d}:00" for h in range(8,24)]
 day2_times = [f"{h:02d}:00" for h in range(0,8)]
 all_times = [("Day1", t) for t in day1_times] + [("Day2", t) for t in day2_times]
 
-# 表格標題
-header = st.columns([1,1,2])
-header[0].markdown("**Day**")
-header[1].markdown("**Time**")
-header[2].markdown("**Temperature (°C)**")
+manual_df = pd.DataFrame(all_times, columns=["Day", "Time"])
+manual_df["Temperature"] = ""
 
-records = []
+# 建立 AgGrid 設定
+gb = GridOptionsBuilder.from_dataframe(manual_df)
+gb.configure_default_column(editable=True)  # 可直接輸入
+gb.configure_column("Day", editable=False)
+gb.configure_column("Time", editable=False)
+gb.configure_grid_options(domLayout="normal")  # 自動展開 → 無卷軸
 
-# 表格列（用 columns 模擬真正表格）
-for day, t in all_times:
-    col1, col2, col3 = st.columns([1,1,2])
+grid_options = gb.build()
 
-    with col1:
-        st.markdown(f"<div style='border:1px solid #ccc; padding:6px;'>{day}</div>", unsafe_allow_html=True)
+grid_response = AgGrid(
+    manual_df,
+    gridOptions=grid_options,
+    height=900,  # 讓 24 小時完整展開
+    fit_columns_on_grid_load=True,
+    theme="balham",  # 最漂亮的主題
+)
 
-    with col2:
-        st.markdown(f"<div style='border:1px solid #ccc; padding:6px;'>{t}</div>", unsafe_allow_html=True)
+df = grid_response["data"]
 
-    with col3:
-        temp = st.text_input(
-            "",
-            key=f"{day}_{t}",
-            placeholder="e.g., 36.8",
-        )
-        st.markdown("<div style='border:1px solid #ccc; height:0px;'></div>", unsafe_allow_html=True)
-
-    if temp.strip() != "":
-        try:
-            temp_val = float(temp)
-            records.append((day, t, temp_val))
-        except:
-            st.error(f"Invalid temperature at {day} {t}")
-
-df = pd.DataFrame(records, columns=["Day", "Time", "Temperature"])
+# 清除空白溫度
+df = df[df["Temperature"] != ""].copy()
 
 if not df.empty:
+    df["Temperature"] = df["Temperature"].astype(float)
+
     today = datetime.today().replace(hour=0, minute=0, second=0, microsecond=0)
     df["DateTime"] = df.apply(lambda row: (
         today - timedelta(days=1) if row["Day"]=="Day1" else today
