@@ -204,7 +204,41 @@ if not df.empty:
                 pass
             return ''
 
-        st.dataframe(df_preview[["Date", "Time", "Temperature"]].style.map(highlight_temp))
+        # ---------------------- Data Preview ----------------------
+st.subheader("🧾 Data Preview (Last 24h)")
+
+df_preview = df_24h.copy()
+df_preview["Date"] = df_preview["DateTime"].dt.strftime("%Y-%m-%d")
+df_preview["Time"] = df_preview["DateTime"].dt.strftime("%H:%M")
+
+# 溫度固定一位小數
+df_preview["Temperature"] = df_preview["Temperature"].map(
+    lambda x: f"{x:.1f}"
+)
+
+# 建立 HTML 表格
+display_df = df_preview[["Date", "Time", "Temperature"]].copy()
+
+# 異常溫度標紅
+def temperature_style(val):
+    try:
+        temp = float(val)
+        if temp < 35 or temp > 43:
+            return "color: red; font-weight: bold;"
+    except (ValueError, TypeError):
+        pass
+    return ""
+
+styled_df = display_df.style.map(
+    temperature_style,
+    subset=["Temperature"]
+)
+
+# 顯示完整表格，不使用 dataframe 卷軸
+st.markdown(
+    styled_df.to_html(index=False),
+    unsafe_allow_html=True
+)
 
         # ---------------------- Temperature Trend ----------------------
         st.subheader("📉 Temperature Trend (Last 24h)")
