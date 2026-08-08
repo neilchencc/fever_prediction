@@ -130,7 +130,7 @@ if not df.empty:
         plt.xticks(rotation=45, ha='left')
         st.pyplot(fig)
 
-else:
-    st.info("⬆️ Please fill in temperatures manually to begin analysis.")
+#else:
+#    st.info("⬆️ Please fill in temperatures manually to begin analysis.")
 
 
