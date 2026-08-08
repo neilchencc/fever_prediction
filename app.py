@@ -204,7 +204,7 @@ if not df.empty:
                 pass
             return ''
 
-        st.dataframe(df_preview[["Date", "Time", "Temperature"]].style.applymap(highlight_temp))
+        st.dataframe(df_preview[["Date", "Time", "Temperature"]].style.map(highlight_temp))
 
         # ---------------------- Temperature Trend ----------------------
         st.subheader("📉 Temperature Trend (Last 24h)")
