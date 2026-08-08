@@ -20,9 +20,8 @@ to predict whether a fever may occur in the coming days.
 Manual entry: edit temperatures directly in the table below.
 
 **Note:**  
-(1) Time formats are fixed as HH:MM in manual mode.  
-(2) The interval between any two consecutive temperature measurements did not exceed 8 hours.  
-(3) The interval between the first and last temperature measurements was at least 19 hours. 
+(1) The interval between any two consecutive temperature measurements did not exceed 8 hours.  
+(2) The interval between the first and last temperature measurements was at least 19 hours. 
 
 **Disclaimer:**  
 The prediction results provided by this app are for research and informational purposes only.
