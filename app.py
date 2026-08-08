@@ -30,53 +30,88 @@ Clinical decisions should always be made by qualified healthcare professionals b
 """)
 
 # ----------------------
-# Manual Entry (表格式、無卷軸)
+# Manual Entry (真正表格、可直接輸入、無卷軸)
 # ----------------------
-st.subheader("Manual Data Entry (24 hours, table-like, no scroll)")
+st.subheader("Manual Data Entry (24 hours, full table, no scroll)")
 
 day1_times = [f"{h:02d}:00" for h in range(8,24)]
 day2_times = [f"{h:02d}:00" for h in range(0,8)]
 all_times = [("Day1", t) for t in day1_times] + [("Day2", t) for t in day2_times]
 
-# 建立表格標題
-col1, col2, col3 = st.columns([1,1,2])
-with col1:
-    st.markdown("**Day**")
-with col2:
-    st.markdown("**Time**")
-with col3:
-    st.markdown("**Temperature (°C)**")
+# 建立表格 HTML
+table_html = """
+<style>
+.table-input td, .table-input th {
+    border: 1px solid #ccc;
+    padding: 6px;
+    text-align: center;
+}
+.table-input {
+    border-collapse: collapse;
+    width: 100%;
+}
+input[type='number'] {
+    width: 80px;
+    padding: 4px;
+    font-size: 14px;
+}
+</style>
 
-records = []
+<table class="table-input">
+<tr>
+    <th>Day</th>
+    <th>Time</th>
+    <th>Temperature (°C)</th>
+</tr>
+"""
 
-# 逐列顯示，不使用卷軸
+# 建立輸入欄位
+temp_values = {}
 for day, t in all_times:
-    col1, col2, col3 = st.columns([1,1,2])
-    with col1:
-        st.write(day)
-    with col2:
-        st.write(t)
-    with col3:
-        temp = st.number_input(
-            "",
-            min_value=30.0,
-            max_value=45.0,
-            step=0.1,
-            format="%.1f",
-            key=f"{day}_{t}"
-        )
-    records.append((day, t, temp))
+    key = f"{day}_{t}"
+    temp_values[key] = st.session_state.get(key, "")
 
-df = pd.DataFrame(records, columns=["Day", "Time", "Temperature"])
-df = df.dropna(subset=["Temperature"])
+    table_html += f"""
+    <tr>
+        <td>{day}</td>
+        <td>{t}</td>
+        <td><input type="number" step="0.1" min="30" max="45" name="{key}" value="{temp_values[key]}"></td>
+    </tr>
+    """
 
-if not df.empty:
-    today = datetime.today().replace(hour=0, minute=0, second=0, microsecond=0)
-    df["DateTime"] = df.apply(lambda row: (
-        today - timedelta(days=1) if row["Day"]=="Day1" else today
-    ) + timedelta(hours=int(row["Time"][:2]), minutes=int(row["Time"][3:])), axis=1)
+table_html += "</table>"
 
-    df = df.sort_values("DateTime").reset_index(drop=True)
+# 顯示表格
+form = st.form("temp_form")
+form.markdown(table_html, unsafe_allow_html=True)
+submitted = form.form_submit_button("Submit Temperatures")
+
+df = pd.DataFrame()
+
+if submitted:
+    # 從 POST 資料抓取輸入值
+    import streamlit as st
+    from streamlit.web.server.websocket_headers import _get_websocket_headers
+
+    headers = _get_websocket_headers()
+    body = st.session_state.get("temp_form", {})
+
+    records = []
+    for day, t in all_times:
+        key = f"{day}_{t}"
+        val = body.get(key, None)
+        if val not in ["", None]:
+            records.append((day, t, float(val)))
+
+    df = pd.DataFrame(records, columns=["Day", "Time", "Temperature"])
+
+    if not df.empty:
+        today = datetime.today().replace(hour=0, minute=0, second=0, microsecond=0)
+        df["DateTime"] = df.apply(lambda row: (
+            today - timedelta(days=1) if row["Day"]=="Day1" else today
+        ) + timedelta(hours=int(row["Time"][:2]), minutes=int(row["Time"][3:])), axis=1)
+
+        df = df.sort_values("DateTime").reset_index(drop=True)
 
 # ----------------------
 # Proceed if Data Exists
