@@ -37,7 +37,7 @@ Clinical decisions should always be made by qualified healthcare professionals b
 # ----------------------
 # Input Method
 # ----------------------
-input_method = st.radio("Select input method:", ["Upload CSV file", "Manual Entry"])
+input_method = st.radio("Select input method:", ["Manual Entry", "Upload CSV file"])
 df = pd.DataFrame(columns=["Date", "Time", "Temperature"])
 
 # ----------------------
