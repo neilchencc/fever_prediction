@@ -29,43 +29,50 @@ They should not be considered as medical advice, diagnosis, or a substitute for 
 Clinical decisions should always be made by qualified healthcare professionals based on comprehensive clinical evaluation.
 """)
 
+
 # ----------------------
-# Manual Entry (表格、無卷軸、可直接輸入)
+# Manual Entry (真正表格、可直接輸入、無卷軸)
 # ----------------------
 st.subheader("Manual Data Entry (24 hours, full table, no scroll)")
 
-# CSS：取消卷軸 + 加格線 + 固定表格高度自動展開
-st.markdown("""
-<style>
-[data-testid="stDataFrame"] div {
-    height: auto !important;
-}
-[data-testid="stDataFrame"] table {
-    border-collapse: collapse !important;
-}
-[data-testid="stDataFrame"] table td, 
-[data-testid="stDataFrame"] table th {
-    border: 1px solid #ccc !important;
-}
-</style>
-""", unsafe_allow_html=True)
-
-# 建立 24 小時表格
 day1_times = [f"{h:02d}:00" for h in range(8,24)]
 day2_times = [f"{h:02d}:00" for h in range(0,8)]
 all_times = [("Day1", t) for t in day1_times] + [("Day2", t) for t in day2_times]
 
-manual_df = pd.DataFrame(all_times, columns=["Day", "Time"])
-manual_df["Temperature"] = np.nan
+# 表格標題
+header = st.columns([1,1,2])
+header[0].markdown("**Day**")
+header[1].markdown("**Time**")
+header[2].markdown("**Temperature (°C)**")
 
-edited_df = st.data_editor(
-    manual_df,
-    hide_index=True,
-    use_container_width=True,
-    num_rows="fixed"
-)
+records = []
 
-df = edited_df.dropna(subset=["Temperature"])
+# 表格列（用 columns 模擬真正表格）
+for day, t in all_times:
+    col1, col2, col3 = st.columns([1,1,2])
+
+    with col1:
+        st.markdown(f"<div style='border:1px solid #ccc; padding:6px;'>{day}</div>", unsafe_allow_html=True)
+
+    with col2:
+        st.markdown(f"<div style='border:1px solid #ccc; padding:6px;'>{t}</div>", unsafe_allow_html=True)
+
+    with col3:
+        temp = st.text_input(
+            "",
+            key=f"{day}_{t}",
+            placeholder="e.g., 36.8",
+        )
+        st.markdown("<div style='border:1px solid #ccc; height:0px;'></div>", unsafe_allow_html=True)
+
+    if temp.strip() != "":
+        try:
+            temp_val = float(temp)
+            records.append((day, t, temp_val))
+        except:
+            st.error(f"Invalid temperature at {day} {t}")
+
+df = pd.DataFrame(records, columns=["Day", "Time", "Temperature"])
 
 if not df.empty:
     today = datetime.today().replace(hour=0, minute=0, second=0, microsecond=0)
@@ -74,6 +81,7 @@ if not df.empty:
     ) + timedelta(hours=int(row["Time"][:2]), minutes=int(row["Time"][3:])), axis=1)
 
     df = df.sort_values("DateTime").reset_index(drop=True)
+
 
 # ----------------------
 # Proceed if Data Exists
