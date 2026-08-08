@@ -5,7 +5,7 @@ import matplotlib.pyplot as plt
 from datetime import datetime, timedelta
 from sklearn.linear_model import LinearRegression
 import joblib
-
+from dateutil import parser
 
 
 # ---------------------------------------------------
@@ -19,11 +19,14 @@ This app uses historical body temperature records from **08:00 of the previous d
 to predict whether a fever may occur in the coming days.
 
 **Input Options:**  
-Manual entry: edit temperatures directly in the table below.
+1. Upload a CSV file with three columns: `Date`, `Time`, `Temperature`  
+2. Manual entry: edit temperatures directly in the table below.
 
 **Note:**  
-(1) The interval between any two consecutive temperature measurements did not exceed 8 hours.  
-(2) The interval between the first and last temperature measurements was at least 19 hours. 
+(1) Date formats can be `20251110`, `2025/11/10`, `Nov 10, 2025`, `2025-11-10`, or `11/10`.  
+(2) Time formats can be `17:00`, `05:00 pm`, `1700`, `0`, `5`, `130`, etc.  
+(3) The interval between any two consecutive temperature measurements did not exceed 8 hours.  
+(4) The interval between the first and last temperature measurements was at least 19 hours. 
 
 **Disclaimer:**  
 The prediction results provided by this app are for research and informational purposes only.
@@ -31,53 +34,101 @@ They should not be considered as medical advice, diagnosis, or a substitute for 
 Clinical decisions should always be made by qualified healthcare professionals based on comprehensive clinical evaluation.
 """)
 
+# ----------------------
+# Input Method
+# ----------------------
+input_method = st.radio("Select input method:", ["Manual Entry", "Upload CSV file"])
+df = pd.DataFrame(columns=["Date", "Time", "Temperature"])
 
 # ----------------------
-# Manual Entry (AgGrid：漂亮、可直接輸入、無卷軸)
+# Helper Function for Robust Date/Time Parsing
 # ----------------------
-from st_aggrid import AgGrid, GridOptionsBuilder
+def parse_datetime(date_str, time_str):
+    time_str = str(time_str).strip()
 
-st.subheader("Manual Data Entry (24 hours, Excel-like table, no scroll)")
+    if time_str in ["", "nan", "NaN"]:
+        time_str = "00:00"
+    elif time_str.isdigit():
+        time_str = time_str.zfill(4)
+        time_str = time_str[:2] + ":" + time_str[2:]
 
-day1_times = [f"{h:02d}:00" for h in range(8,24)]
-day2_times = [f"{h:02d}:00" for h in range(0,8)]
-all_times = [("Day1", t) for t in day1_times] + [("Day2", t) for t in day2_times]
+    try:
+        dt_date = parser.parse(str(date_str), dayfirst=False, fuzzy=True)
+    except Exception:
+        raise ValueError(f"Unrecognized date format: {date_str}")
 
-manual_df = pd.DataFrame(all_times, columns=["Day", "Time"])
-manual_df["Temperature"] = ""
+    try:
+        dt_time = parser.parse(time_str, fuzzy=True).time()
+    except Exception:
+        raise ValueError(f"Unrecognized time format: {time_str}")
 
-# 建立 AgGrid 設定
-gb = GridOptionsBuilder.from_dataframe(manual_df)
-gb.configure_default_column(editable=True)  # 可直接輸入
-gb.configure_column("Day", editable=False)
-gb.configure_column("Time", editable=False)
-gb.configure_grid_options(domLayout="normal")  # 自動展開 → 無卷軸
+    return datetime.combine(dt_date.date(), dt_time)
 
-grid_options = gb.build()
+# ----------------------
+# CSV Upload
+# ----------------------
+if input_method == "Upload CSV file":
+    uploaded_file = st.file_uploader("Upload CSV with at least three columns: Date, Time, Temperature", type=["csv"])
+    if uploaded_file is not None:
+        try:
+            # 偵測編碼
+            uploaded_file.seek(0)
+            rawdata = uploaded_file.read()
+            result = chardet.detect(rawdata)
+            encoding = result['encoding']
 
-grid_response = AgGrid(
-    manual_df,
-    gridOptions=grid_options,
-    height=900,  # 讓 24 小時完整展開
-    fit_columns_on_grid_load=True,
-    theme="balham",  # 最漂亮的主題
-)
+            if encoding is None:
+                encoding = "big5"
 
-df = grid_response["data"]
+            uploaded_file.seek(0)
+            df = pd.read_csv(uploaded_file, encoding=encoding)
 
-# 清除空白溫度
-df = df[df["Temperature"] != ""].copy()
+            if df.empty:
+                st.error("Uploaded CSV is empty.")
+            else:
+                # 只保留前三欄並重新命名
+                df = df.iloc[:, :3]
+                df.columns = ["Date", "Time", "Temperature"]
+                df = df.dropna(subset=["Temperature"])  # 刪除溫度空值列
 
-if not df.empty:
-    df["Temperature"] = df["Temperature"].astype(float)
+                # 清理數據
+                df["Date"] = df["Date"].astype(str).str.replace(r"\.0$", "", regex=True).str.strip()
+                df["Time"] = df["Time"].astype(str).str.replace(r"\.0$", "", regex=True).str.strip()
 
-    today = datetime.today().replace(hour=0, minute=0, second=0, microsecond=0)
-    df["DateTime"] = df.apply(lambda row: (
-        today - timedelta(days=1) if row["Day"]=="Day1" else today
-    ) + timedelta(hours=int(row["Time"][:2]), minutes=int(row["Time"][3:])), axis=1)
+                # 解析日期時間
+                df["DateTime"] = df.apply(lambda row: parse_datetime(row["Date"], row["Time"]), axis=1)
+                df = df.sort_values("DateTime").reset_index(drop=True)
 
-    df = df.sort_values("DateTime").reset_index(drop=True)
+        except pd.errors.EmptyDataError:
+            st.error("Uploaded CSV is empty or unreadable.")
+        except UnicodeDecodeError:
+            st.error("Failed to decode CSV. Please make sure it's encoded in UTF-8, GBK, or Big5.")
+        except Exception as e:
+            st.error(f"Error reading CSV: {e}")
 
+# ----------------------
+# Manual Entry
+# ----------------------
+elif input_method == "Manual Entry":
+    st.subheader("Manual Data Entry (editable table)")
+    
+    day1_times = [f"{h:02d}:00" for h in range(8,24)]
+    day2_times = [f"{h:02d}:00" for h in range(0,8)]
+    all_times = [("Day1", t) for t in day1_times] + [("Day2", t) for t in day2_times]
+
+    manual_df = pd.DataFrame(all_times, columns=["Day", "Time"])
+    manual_df["Temperature"] = np.nan
+
+    edited_df = st.data_editor(manual_df, num_rows="dynamic", use_container_width=True)
+    edited_df = edited_df.dropna(subset=["Temperature"])
+
+    if not edited_df.empty:
+        df = edited_df.copy()
+        today = datetime.today().replace(hour=0, minute=0, second=0, microsecond=0)
+        df["DateTime"] = df.apply(lambda row: (
+            today - timedelta(days=1) if row["Day"]=="Day1" else today
+        ) + timedelta(hours=int(row["Time"][:2]), minutes=int(row["Time"][3:])), axis=1)
+        df = df.sort_values("DateTime").reset_index(drop=True)
 
 # ----------------------
 # Proceed if Data Exists
@@ -127,14 +178,17 @@ if not df.empty:
             if pred_prob >= threshold:
                 st.success(f"Prediction: Fever expected in the coming day (Score/Probability={pred_prob:.3f} ≥ {threshold})")
             else:
-                st.info(f"Prediction: No fever expected in the coming day (Score/Probability={pred_prob:.3f} < {threshold})")
+                st.info(f"Prediction: No fever expected in the coming day(Score/Probability={pred_prob:.3f} < {threshold})")
 
+        except FileNotFoundError as e:
+            st.error(f"Missing model file: {e.filename}")
         except Exception as e:
             st.error(f"Error loading scaler or model: {e}")
 
+ 
         # ---------------------- Temperature Trend ----------------------
         st.subheader("📉 Temperature Trend (Last 24h)")
-
+        
         from matplotlib.dates import HourLocator, DateFormatter
         fig, ax = plt.subplots()
 
@@ -154,6 +208,9 @@ if not df.empty:
         plt.xticks(rotation=45, ha='left')
         st.pyplot(fig)
 
+
+
 else:
-    st.info("⬆️ Please fill in temperatures manually to begin analysis.")
+    st.info("⬆️ Please upload a CSV file or fill in temperatures manually to begin analysis.")
+
 
