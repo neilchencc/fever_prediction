@@ -188,16 +188,27 @@ if not df.empty:
  
         # ---------------------- Temperature Trend ----------------------
         st.subheader("📉 Temperature Trend (Last 24h)")
+        
+        from matplotlib.dates import HourLocator, DateFormatter
         fig, ax = plt.subplots()
+
         ax.plot(df_24h["DateTime"], df_24h["Temperature"], marker='o', label="Temperature")
         ax.axhline(y=38, color='darkred', linestyle='--', linewidth=2, label="Fever Threshold (38°C)")
+
+        # X 軸：每小時一個刻度
+        ax.xaxis.set_major_locator(HourLocator(interval=1))
+        ax.xaxis.set_major_formatter(DateFormatter("%H:%M"))
+
         ax.set_ylim(35, 43)
         ax.set_xlabel("Time")
         ax.set_ylabel("Temperature (°C)")
         ax.grid(True)
         ax.legend()
+
         plt.xticks(rotation=45, ha='left')
         st.pyplot(fig)
+
+
 
 else:
     st.info("⬆️ Please upload a CSV file or fill in temperatures manually to begin analysis.")
