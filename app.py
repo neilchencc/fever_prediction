@@ -6,7 +6,7 @@ from datetime import datetime, timedelta
 from sklearn.linear_model import LinearRegression
 import joblib
 
-pip install streamlit-aggrid
+
 
 # ---------------------------------------------------
 # Title & Introduction
