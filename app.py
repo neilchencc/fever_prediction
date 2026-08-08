@@ -30,29 +30,43 @@ Clinical decisions should always be made by qualified healthcare professionals b
 """)
 
 # ----------------------
-# Manual Entry Only
+# Manual Entry (24 小時完整展開)
 # ----------------------
-st.subheader("Manual Data Entry (editable table)")
+st.subheader("Manual Data Entry (24 hours, no scroll)")
 
+# Day1: 前一天 08:00–23:00
 day1_times = [f"{h:02d}:00" for h in range(8,24)]
+# Day2: 當天 00:00–07:00
 day2_times = [f"{h:02d}:00" for h in range(0,8)]
+
 all_times = [("Day1", t) for t in day1_times] + [("Day2", t) for t in day2_times]
 
-manual_df = pd.DataFrame(all_times, columns=["Day", "Time"])
-manual_df["Temperature"] = np.nan
+records = []
 
-edited_df = st.data_editor(manual_df, num_rows="dynamic", use_container_width=True)
-edited_df = edited_df.dropna(subset=["Temperature"])
+for day, t in all_times:
+    temp = st.number_input(
+        f"{day} — {t}",
+        min_value=30.0,
+        max_value=45.0,
+        step=0.1,
+        format="%.1f",
+        key=f"{day}_{t}"
+    )
+    records.append((day, t, temp))
 
-df = pd.DataFrame()
+df = pd.DataFrame(records, columns=["Day", "Time", "Temperature"])
 
-if not edited_df.empty:
-    df = edited_df.copy()
+# 移除未填寫的欄位（避免 NaN）
+df = df.dropna(subset=["Temperature"])
+
+if not df.empty:
     today = datetime.today().replace(hour=0, minute=0, second=0, microsecond=0)
     df["DateTime"] = df.apply(lambda row: (
         today - timedelta(days=1) if row["Day"]=="Day1" else today
     ) + timedelta(hours=int(row["Time"][:2]), minutes=int(row["Time"][3:])), axis=1)
+
     df = df.sort_values("DateTime").reset_index(drop=True)
+
 
 # ----------------------
 # Proceed if Data Exists
