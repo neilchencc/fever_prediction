@@ -7,9 +7,21 @@ from sklearn.linear_model import LinearRegression
 import joblib
 
 
-# ---------------------------------------------------
+# ============================================================
+# Page Configuration
+# ============================================================
+
+st.set_page_config(
+    page_title="Fever Prediction in Children",
+    page_icon="🌡️",
+    layout="wide"
+)
+
+
+# ============================================================
 # Title & Introduction
-# ---------------------------------------------------
+# ============================================================
+
 st.title("📈 Fever Prediction in Children")
 
 st.markdown("""
@@ -21,9 +33,9 @@ to predict whether a fever may occur in the coming day.
 Manual entry: edit temperatures directly in the table below.
 
 **Input Criteria:**  
-(1) The interval between any two consecutive temperature measurements must not exceed 8 hours.  
-(2) The interval between the first and last temperature measurements must be at least 19 hours.  
-(3) Body temperature must be between 35°C and 43°C.
+1. The interval between any two consecutive temperature measurements must not exceed **8 hours**.
+2. The interval between the first and last temperature measurements must be at least **19 hours**.
+3. Body temperature must be between **35°C and 43°C**.
 
 **Disclaimer:**  
 The prediction results provided by this app are for research and informational purposes only.
@@ -32,9 +44,10 @@ Clinical decisions should always be made by qualified healthcare professionals b
 """)
 
 
-# ---------------------------------------------------
+# ============================================================
 # Manual Data Entry
-# ---------------------------------------------------
+# ============================================================
+
 st.subheader("Manual Data Entry (editable table)")
 
 day1_times = [f"{h:02d}:00" for h in range(8, 24)]
@@ -50,18 +63,60 @@ manual_df = pd.DataFrame(
     columns=["Day", "Time"]
 )
 
-manual_df["Temperature"] = np.nan
-
-edited_df = st.data_editor(
-    manual_df,
-    num_rows="dynamic",
-    use_container_width=True
+# Explicitly specify float dtype for Temperature
+# to avoid st.data_editor type inference problems.
+manual_df["Temperature"] = pd.Series(
+    [np.nan] * len(manual_df),
+    dtype="float64"
 )
 
 
-# ---------------------------------------------------
+# ============================================================
+# Data Editor
+# ============================================================
+
+try:
+
+    edited_df = st.data_editor(
+        manual_df,
+        column_config={
+            "Day": st.column_config.TextColumn(
+                "Day",
+                disabled=True
+            ),
+            "Time": st.column_config.TextColumn(
+                "Time",
+                disabled=True
+            ),
+            "Temperature": st.column_config.NumberColumn(
+                "Temperature (°C)",
+                min_value=35.0,
+                max_value=43.0,
+                step=0.1,
+                format="%.1f"
+            )
+        },
+        disabled=["Day", "Time"],
+        hide_index=True,
+        num_rows="fixed",
+        use_container_width=True
+    )
+
+except Exception as e:
+
+    st.error(
+        "Unable to display the temperature input table."
+    )
+
+    st.exception(e)
+
+    st.stop()
+
+
+# ============================================================
 # Convert Temperature to Numeric
-# ---------------------------------------------------
+# ============================================================
+
 edited_df["Temperature"] = pd.to_numeric(
     edited_df["Temperature"],
     errors="coerce"
@@ -72,15 +127,17 @@ edited_df = edited_df.dropna(
 ).copy()
 
 
-# ---------------------------------------------------
+# ============================================================
 # Create DateTime
-# ---------------------------------------------------
+# ============================================================
+
 df = pd.DataFrame()
 
 if not edited_df.empty:
 
     df = edited_df.copy()
 
+    # Use today's date as the reference date
     today = datetime.today().replace(
         hour=0,
         minute=0,
@@ -88,16 +145,23 @@ if not edited_df.empty:
         microsecond=0
     )
 
-    df["DateTime"] = df.apply(
-        lambda row: (
-            today - timedelta(days=1)
-            if row["Day"] == "Day1"
-            else today
+    def create_datetime(row):
+
+        if row["Day"] == "Day1":
+            base_date = today - timedelta(days=1)
+        else:
+            base_date = today
+
+        hour = int(row["Time"][:2])
+        minute = int(row["Time"][3:])
+
+        return base_date + timedelta(
+            hours=hour,
+            minutes=minute
         )
-        + timedelta(
-            hours=int(row["Time"][:2]),
-            minutes=int(row["Time"][3:])
-        ),
+
+    df["DateTime"] = df.apply(
+        create_datetime,
         axis=1
     )
 
@@ -106,15 +170,16 @@ if not edited_df.empty:
     ).reset_index(drop=True)
 
 
-# ---------------------------------------------------
+# ============================================================
 # Proceed if Data Exists
-# ---------------------------------------------------
+# ============================================================
+
 if not df.empty:
 
-    # ---------------------------------------------------
-    # Define the 24-hour observation window
+    # ========================================================
+    # Define 24-hour observation window
     # 08:00 previous day → 08:00 current day
-    # ---------------------------------------------------
+    # ========================================================
 
     last_date = df["DateTime"].dt.date.max()
 
@@ -133,12 +198,15 @@ if not df.empty:
         & (df["DateTime"] <= end_time)
     ].copy()
 
-    df_24h = df_24h.reset_index(drop=True)
+    df_24h = df_24h.sort_values(
+        "DateTime"
+    ).reset_index(drop=True)
 
 
-    # ---------------------------------------------------
-    # Check whether data exist
-    # ---------------------------------------------------
+    # ========================================================
+    # Check if data are available
+    # ========================================================
+
     if df_24h.empty:
 
         st.warning(
@@ -146,380 +214,431 @@ if not df.empty:
             "(08:00 → 08:00)."
         )
 
-    else:
+        st.stop()
 
-        # ---------------------------------------------------
-        # Check Temperature Range
-        # ---------------------------------------------------
 
-        invalid_temperature = (
-            (df_24h["Temperature"] < 35)
-            | (df_24h["Temperature"] > 43)
+    # ========================================================
+    # Check Number of Measurements
+    # ========================================================
+
+    if len(df_24h) < 2:
+
+        st.error(
+            "At least two temperature measurements are required."
         )
 
-        if invalid_temperature.any():
+        st.stop()
 
-            invalid_values = df_24h.loc[
-                invalid_temperature,
-                "Temperature"
-            ].tolist()
+
+    # ========================================================
+    # Check Temperature Range
+    # ========================================================
+
+    invalid_temperature = (
+        (df_24h["Temperature"] < 35)
+        | (df_24h["Temperature"] > 43)
+    )
+
+    if invalid_temperature.any():
+
+        invalid_values = df_24h.loc[
+            invalid_temperature,
+            "Temperature"
+        ].tolist()
+
+        st.error(
+            "Invalid temperature value(s): "
+            f"{invalid_values}. "
+            "Temperature must be between 35°C and 43°C."
+        )
+
+        st.stop()
+
+
+    # ========================================================
+    # Calculate Intervals Between Consecutive Measurements
+    # ========================================================
+
+    time_diff_hours = (
+        df_24h["DateTime"]
+        .diff()
+        .dt.total_seconds()
+        / 3600
+    )
+
+    # First row has no previous measurement
+    consecutive_intervals = time_diff_hours.iloc[1:]
+
+    max_gap_hours = consecutive_intervals.max()
+
+
+    # ========================================================
+    # Calculate Total Observation Duration
+    # ========================================================
+
+    first_datetime = df_24h["DateTime"].min()
+    last_datetime = df_24h["DateTime"].max()
+
+    total_duration_hours = (
+        last_datetime - first_datetime
+    ).total_seconds() / 3600
+
+
+    # ========================================================
+    # Check 8-hour Maximum Gap
+    # ========================================================
+
+    if max_gap_hours > 8:
+
+        st.error(
+            f"Invalid input: The maximum interval between "
+            f"consecutive temperature measurements is "
+            f"{max_gap_hours:.1f} hours. "
+            f"The interval must not exceed 8 hours."
+        )
+
+        st.stop()
+
+
+    # ========================================================
+    # Check 19-hour Minimum Duration
+    # ========================================================
+
+    if total_duration_hours < 19:
+
+        st.error(
+            f"Insufficient observation period: The interval "
+            f"between the first and last temperature "
+            f"measurements is {total_duration_hours:.1f} hours. "
+            f"It must be at least 19 hours."
+        )
+
+        st.stop()
+
+
+    # ========================================================
+    # Input Criteria Passed
+    # ========================================================
+
+    st.success(
+        f"✓ Input criteria satisfied — "
+        f"maximum interval: {max_gap_hours:.1f} h; "
+        f"observation duration: {total_duration_hours:.1f} h."
+    )
+
+
+    # ========================================================
+    # Calculate Hours
+    # ========================================================
+
+    df_24h["Hours"] = (
+        df_24h["DateTime"]
+        - df_24h["DateTime"].min()
+    ).dt.total_seconds() / 3600
+
+
+    # ========================================================
+    # Feature Extraction
+    # ========================================================
+
+    max_bt = df_24h["Temperature"].max()
+
+    min_bt = df_24h["Temperature"].min()
+
+    mean_bt = df_24h["Temperature"].mean()
+
+    std_bt = df_24h["Temperature"].std()
+
+
+    # --------------------------------------------------------
+    # Temperature Slope
+    # --------------------------------------------------------
+
+    X = df_24h["Hours"].values.reshape(-1, 1)
+
+    y = df_24h["Temperature"].values
+
+    slope = LinearRegression().fit(
+        X,
+        y
+    ).coef_[0]
+
+
+    # --------------------------------------------------------
+    # Maximum Temperature in Last 8 Hours
+    # --------------------------------------------------------
+
+    last_time = df_24h["Hours"].max()
+
+    last_8h = df_24h[
+        df_24h["Hours"] >= last_time - 8
+    ]
+
+    max_last8 = last_8h["Temperature"].max()
+
+
+    # --------------------------------------------------------
+    # Temperature Difference
+    # --------------------------------------------------------
+
+    range_bt = max_bt - min_bt
+
+
+    # IMPORTANT:
+    # This definition was confirmed by the user.
+    #
+    # T_Diff_MaxLast8H_Max =
+    # T_MaxLast8H - T_Max
+    # --------------------------------------------------------
+
+    diff_last8_allmax = max_last8 - max_bt
+
+
+    # ========================================================
+    # Feature Vector
+    # ========================================================
+
+    features = [
+        max_bt,
+        min_bt,
+        mean_bt,
+        std_bt,
+        slope,
+        range_bt,
+        max_last8,
+        diff_last8_allmax
+    ]
+
+
+    # ========================================================
+    # Model Prediction
+    # ========================================================
+
+    st.subheader("🤖 Prediction Result")
+
+    try:
+
+        # ----------------------------------------------------
+        # Load scaler
+        # ----------------------------------------------------
+
+        scaler = joblib.load(
+            "scaler.pkl"
+        )
+
+
+        # ----------------------------------------------------
+        # Load SVM model
+        # ----------------------------------------------------
+
+        svm_model = joblib.load(
+            "svm_model.pkl"
+        )
+
+
+        # ----------------------------------------------------
+        # Convert features to numpy array
+        # ----------------------------------------------------
+
+        features_array = np.array(
+            features,
+            dtype=float
+        ).reshape(1, -1)
+
+
+        # ----------------------------------------------------
+        # Scale features
+        # ----------------------------------------------------
+
+        features_scaled = scaler.transform(
+            features_array
+        )
+
+
+        # ----------------------------------------------------
+        # SVM Probability
+        # ----------------------------------------------------
+
+        if not hasattr(
+            svm_model,
+            "predict_proba"
+        ):
 
             st.error(
-                "Invalid temperature value(s): "
-                f"{invalid_values}. "
-                "Temperature must be between 35°C and 43°C."
+                "The loaded SVM model does not support "
+                "probability prediction."
             )
 
             st.stop()
 
 
-        # ---------------------------------------------------
-        # Check 8-hour Maximum Gap
-        # ---------------------------------------------------
+        pred_prob = svm_model.predict_proba(
+            features_scaled
+        )[0][1]
 
-        time_diff_hours = (
-            df_24h["DateTime"]
-            .diff()
-            .dt.total_seconds()
-            / 3600
-        )
 
-        # The first observation has no preceding observation
-        max_gap_hours = time_diff_hours.iloc[1:].max()
+        # ----------------------------------------------------
+        # Threshold
+        # ----------------------------------------------------
 
-        # If only one measurement is entered
-        if len(df_24h) < 2:
+        threshold = 0.5
 
-            st.error(
-                "At least two temperature measurements "
-                "are required."
+
+        # ----------------------------------------------------
+        # Prediction
+        # ----------------------------------------------------
+
+        if pred_prob >= threshold:
+
+            st.success(
+                f"Prediction: Fever expected in the coming day "
+                f"(Probability = {pred_prob:.3f} ≥ {threshold})"
             )
 
-            st.stop()
+        else:
 
-
-        # ---------------------------------------------------
-        # Check 19-hour Minimum Duration
-        # ---------------------------------------------------
-
-        total_duration_hours = (
-            df_24h["DateTime"].max()
-            - df_24h["DateTime"].min()
-        ).total_seconds() / 3600
-
-
-        # ---------------------------------------------------
-        # Apply Inclusion Criteria
-        # ---------------------------------------------------
-
-        if max_gap_hours > 8:
-
-            st.error(
-                f"Invalid input: The maximum interval between "
-                f"consecutive temperature measurements is "
-                f"{max_gap_hours:.1f} hours. "
-                f"The interval must not exceed 8 hours."
-            )
-
-            st.stop()
-
-
-        if total_duration_hours < 19:
-
-            st.error(
-                f"Insufficient observation period: The interval "
-                f"between the first and last temperature "
-                f"measurements is {total_duration_hours:.1f} hours. "
-                f"It must be at least 19 hours."
-            )
-
-            st.stop()
-
-
-        # ---------------------------------------------------
-        # Display Data Quality Information
-        # ---------------------------------------------------
-
-        st.success(
-            f"Input criteria satisfied: "
-            f"maximum measurement interval = "
-            f"{max_gap_hours:.1f} h; "
-            f"observation duration = "
-            f"{total_duration_hours:.1f} h."
-        )
-
-
-        # ---------------------------------------------------
-        # Calculate Hours
-        # ---------------------------------------------------
-
-        df_24h["Hours"] = (
-            df_24h["DateTime"]
-            - df_24h["DateTime"].min()
-        ).dt.total_seconds() / 3600
-
-
-        # ===================================================
-        # Features
-        # ===================================================
-
-        max_bt = df_24h["Temperature"].max()
-
-        min_bt = df_24h["Temperature"].min()
-
-        mean_bt = df_24h["Temperature"].mean()
-
-        std_bt = df_24h["Temperature"].std()
-
-
-        # ---------------------------------------------------
-        # Temperature Slope
-        # ---------------------------------------------------
-
-        X = df_24h["Hours"].values.reshape(-1, 1)
-
-        y = df_24h["Temperature"].values
-
-        slope = LinearRegression().fit(
-            X,
-            y
-        ).coef_[0]
-
-
-        # ---------------------------------------------------
-        # Last 8-hour Maximum Temperature
-        # ---------------------------------------------------
-
-        last_time = df_24h["Hours"].max()
-
-        last_8h = df_24h[
-            df_24h["Hours"] >= last_time - 8
-        ]
-
-        max_last8 = last_8h["Temperature"].max()
-
-
-        # ---------------------------------------------------
-        # Temperature Range
-        # ---------------------------------------------------
-
-        range_bt = max_bt - min_bt
-
-
-        # ---------------------------------------------------
-        # Difference Between Last 8h Maximum and Overall Maximum
-        #
-        # Confirmed by user:
-        # T_Diff_MaxLast8H_Max = T_MaxLast8H - T_Max
-        # ---------------------------------------------------
-
-        diff_last8_allmax = max_last8 - max_bt
-
-
-        # ---------------------------------------------------
-        # Feature Vector
-        # ---------------------------------------------------
-
-        features = [
-            max_bt,
-            min_bt,
-            mean_bt,
-            std_bt,
-            slope,
-            range_bt,
-            max_last8,
-            diff_last8_allmax
-        ]
-
-
-        # ===================================================
-        # Model Prediction
-        # ===================================================
-
-        try:
-
-            scaler = joblib.load(
-                "scaler.pkl"
-            )
-
-            svm_model = joblib.load(
-                "svm_model.pkl"
+            st.info(
+                f"Prediction: No fever expected in the coming day "
+                f"(Probability = {pred_prob:.3f} < {threshold})"
             )
 
 
-            # ---------------------------------------------------
-            # Scale Features
-            # ---------------------------------------------------
+        # ----------------------------------------------------
+        # Probability
+        # ----------------------------------------------------
 
-            features_scaled = scaler.transform(
-                np.array(features).reshape(1, -1)
-            )
-
-
-            # ---------------------------------------------------
-            # Prediction Result
-            # ---------------------------------------------------
-
-            st.subheader("🤖 Prediction Result")
-
-
-            # ---------------------------------------------------
-            # Obtain Probability
-            # ---------------------------------------------------
-
-            if hasattr(
-                svm_model,
-                "predict_proba"
-            ):
-
-                pred_prob = svm_model.predict_proba(
-                    features_scaled
-                )[0][1]
-
-            else:
-
-                st.error(
-                    "The loaded SVM model does not support "
-                    "probability prediction (predict_proba)."
-                )
-
-                st.stop()
-
-
-            # ---------------------------------------------------
-            # Classification Threshold
-            # ---------------------------------------------------
-
-            threshold = 0.5
-
-
-            # ---------------------------------------------------
-            # Display Prediction
-            # ---------------------------------------------------
-
-            if pred_prob >= threshold:
-
-                st.success(
-                    f"Prediction: Fever expected in the coming day "
-                    f"(Probability = {pred_prob:.3f} ≥ {threshold})"
-                )
-
-            else:
-
-                st.info(
-                    f"Prediction: No fever expected in the coming day "
-                    f"(Probability = {pred_prob:.3f} < {threshold})"
-                )
-
-
-            # ---------------------------------------------------
-            # Display Probability
-            # ---------------------------------------------------
-
-            st.metric(
-                label="Predicted Probability of Fever",
-                value=f"{pred_prob:.3f}"
-            )
-
-
-        except FileNotFoundError as e:
-
-            st.error(
-                f"Model or scaler file not found: {e}"
-            )
-
-        except Exception as e:
-
-            st.error(
-                f"Error loading scaler or model: {e}"
-            )
-
-
-        # ===================================================
-        # Temperature Trend
-        # ===================================================
-
-        st.subheader(
-            "📉 Temperature Trend (Last 24h)"
-        )
-
-        from matplotlib.dates import (
-            HourLocator,
-            DateFormatter
-        )
-
-        fig, ax = plt.subplots()
-
-
-        # ---------------------------------------------------
-        # Temperature Curve
-        # ---------------------------------------------------
-
-        ax.plot(
-            df_24h["DateTime"],
-            df_24h["Temperature"],
-            marker="o",
-            label="Temperature"
+        st.metric(
+            label="Predicted Probability of Fever",
+            value=f"{pred_prob:.3f}"
         )
 
 
-        # ---------------------------------------------------
-        # Fever Threshold
-        # ---------------------------------------------------
+    except FileNotFoundError as e:
 
-        ax.axhline(
-            y=38,
-            color="darkred",
-            linestyle="--",
-            linewidth=2,
-            label="Fever Threshold (38°C)"
+        st.error(
+            "Model or scaler file not found. "
+            "Please make sure both "
+            "`scaler.pkl` and `svm_model.pkl` "
+            "are included in the Streamlit deployment."
         )
 
+        st.exception(e)
 
-        # ---------------------------------------------------
-        # X-axis: Hourly Tick
-        # ---------------------------------------------------
+    except Exception as e:
 
-        ax.xaxis.set_major_locator(
-            HourLocator(interval=1)
+        st.error(
+            "An error occurred during model prediction."
         )
 
-        ax.xaxis.set_major_formatter(
-            DateFormatter("%H:%M")
-        )
+        st.exception(e)
 
 
-        # ---------------------------------------------------
-        # Axis Settings
-        # ---------------------------------------------------
+    # ========================================================
+    # Temperature Trend
+    # ========================================================
 
-        ax.set_ylim(
-            35,
-            43
-        )
+    st.subheader(
+        "📉 Temperature Trend (Last 24h)"
+    )
 
-        ax.set_xlabel(
-            "Time"
-        )
+    from matplotlib.dates import (
+        HourLocator,
+        DateFormatter
+    )
 
-        ax.set_ylabel(
-            "Temperature (°C)"
-        )
-
-        ax.grid(
-            True
-        )
-
-        ax.legend()
+    fig, ax = plt.subplots(
+        figsize=(10, 5)
+    )
 
 
-        plt.xticks(
-            rotation=45,
-            ha="left"
-        )
+    # --------------------------------------------------------
+    # Temperature Curve
+    # --------------------------------------------------------
 
-        plt.tight_layout()
+    ax.plot(
+        df_24h["DateTime"],
+        df_24h["Temperature"],
+        marker="o",
+        label="Temperature"
+    )
 
-        st.pyplot(
-            fig
-        )
+
+    # --------------------------------------------------------
+    # Fever Threshold
+    # --------------------------------------------------------
+
+    ax.axhline(
+        y=38,
+        color="darkred",
+        linestyle="--",
+        linewidth=2,
+        label="Fever Threshold (38°C)"
+    )
+
+
+    # --------------------------------------------------------
+    # X-axis
+    # --------------------------------------------------------
+
+    ax.xaxis.set_major_locator(
+        HourLocator(interval=1)
+    )
+
+    ax.xaxis.set_major_formatter(
+        DateFormatter("%H:%M")
+    )
+
+
+    # --------------------------------------------------------
+    # Y-axis
+    # --------------------------------------------------------
+
+    ax.set_ylim(
+        35,
+        43
+    )
+
+
+    # --------------------------------------------------------
+    # Labels
+    # --------------------------------------------------------
+
+    ax.set_xlabel(
+        "Time"
+    )
+
+    ax.set_ylabel(
+        "Temperature (°C)"
+    )
+
+
+    # --------------------------------------------------------
+    # Grid & Legend
+    # --------------------------------------------------------
+
+    ax.grid(
+        True
+    )
+
+    ax.legend()
+
+
+    # --------------------------------------------------------
+    # Rotate X-axis labels
+    # --------------------------------------------------------
+
+    plt.xticks(
+        rotation=45,
+        ha="right"
+    )
+
+    plt.tight_layout()
+
+
+    # --------------------------------------------------------
+    # Display Figure
+    # --------------------------------------------------------
+
+    st.pyplot(
+        fig
+    )
