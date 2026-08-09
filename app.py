@@ -263,6 +263,3 @@ if not df.empty:
 
 
 
-    )
-
-
