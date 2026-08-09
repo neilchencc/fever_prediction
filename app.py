@@ -549,5 +549,3 @@ else:
         )
 
         plt.close(fig)
-```
-
