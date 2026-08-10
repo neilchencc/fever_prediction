@@ -1,1 +1,246 @@
-import streamlit as st import pandas as pd import numpy as np from datetime import datetime, timedelta from sklearn.linear_model import LinearRegression import joblib # --------------------------------------------------- # Title & Introduction # --------------------------------------------------- st.title("📈 Fever Prediction in Children") st.markdown(""" **App Description:** This app uses historical body temperature records from **08:00 of the previous day to 08:00 of the last day** to predict whether a fever may occur in the coming day. **Input Method:** Enter temperatures manually in the table below. **Note:** (1) The interval between any two consecutive temperature measurements should not exceed 8 hours. (2) The interval between the first and last temperature measurements should be at least 19 hours. **Disclaimer:** The prediction results provided by this app are for research and informational purposes only. They should not be considered as medical advice, diagnosis, or a substitute for professional medical judgment. Clinical decisions should always be made by qualified healthcare professionals based on comprehensive clinical evaluation. """) # --------------------------------------------------- # Manual Entry # --------------------------------------------------- st.subheader("Manual Data Entry") day1_times = [f"{h:02d}:00" for h in range(8, 24)] day2_times = [f"{h:02d}:00" for h in range(0, 8)] all_times = [("Day1", t) for t in day1_times] + \ [("Day2", t) for t in day2_times] manual_df = pd.DataFrame( all_times, columns=["Day", "Time"] ) manual_df["Temperature"] = np.nan edited_df = st.data_editor( manual_df, num_rows="dynamic", use_container_width=True ) edited_df = edited_df.dropna(subset=["Temperature"]) # --------------------------------------------------- # Create DateTime # --------------------------------------------------- df = pd.DataFrame(columns=["Day", "Time", "Temperature", "DateTime"]) if not edited_df.empty: df = edited_df.copy() today = datetime.today().replace( hour=0, minute=0, second=0, microsecond=0 ) df["DateTime"] = df.apply( lambda row: ( today - timedelta(days=1) if row["Day"] == "Day1" else today ) + timedelta( hours=int(row["Time"][:2]), minutes=int(row["Time"][3:]) ), axis=1 ) # 確保溫度為數值 df["Temperature"] = pd.to_numeric( df["Temperature"], errors="coerce" ) df = df.dropna( subset=["Temperature"] ) df = df.sort_values( "DateTime" ).reset_index(drop=True) # --------------------------------------------------- # Proceed if Data Exists # --------------------------------------------------- if not df.empty: # --------------------------------------------------- # Select Last 24 Hours # --------------------------------------------------- last_date = df["DateTime"].dt.date.max() end_time = ( datetime.combine( last_date, datetime.min.time() ) + timedelta(hours=8) ) start_time = end_time - timedelta(hours=24) df_24h = df[ (df["DateTime"] >= start_time) & (df["DateTime"] <= end_time) ].copy().reset_index(drop=True) # --------------------------------------------------- # Check Data # --------------------------------------------------- if df_24h.empty: st.warning( "No data available in the last 24 hours (08:00 → 08:00)." ) else: # --------------------------------------------------- # Calculate Hours # --------------------------------------------------- df_24h["Hours"] = ( df_24h["DateTime"] - df_24h["DateTime"].min() ).dt.total_seconds() / 3600 # --------------------------------------------------- # Features # --------------------------------------------------- max_bt = df_24h["Temperature"].max() min_bt = df_24h["Temperature"].min() mean_bt = df_24h["Temperature"].mean() std_bt = df_24h["Temperature"].std() # 如果只有一筆資料，std 會是 NaN if pd.isna(std_bt): std_bt = 0.0 # --------------------------------------------------- # Temperature Slope # --------------------------------------------------- X = df_24h["Hours"].values.reshape(-1, 1) y = df_24h["Temperature"].values if len(df_24h) >= 2: slope = LinearRegression().fit(X, y).coef_[0] else: slope = 0.0 # --------------------------------------------------- # Last 8 Hours # --------------------------------------------------- last_time = df_24h["Hours"].max() last_8h = df_24h[ df_24h["Hours"] >= last_time - 8 ] max_last8 = last_8h["Temperature"].max() range_bt = max_bt - min_bt diff_last8_allmax = max_last8 - max_bt # --------------------------------------------------- # Feature Vector # --------------------------------------------------- features = [ max_bt, min_bt, mean_bt, std_bt, slope, range_bt, max_last8, diff_last8_allmax ] # --------------------------------------------------- # Model Prediction # --------------------------------------------------- st.subheader("🤖 Prediction Result") try: scaler = joblib.load("scaler.pkl") svm_model = joblib.load("svm_model.pkl") features_scaled = scaler.transform( np.array(features).reshape(1, -1) ) # --------------------------------------------------- # Prediction Score / Probability # --------------------------------------------------- if hasattr(svm_model, "predict_proba"): pred_prob = svm_model.predict_proba( features_scaled )[0][1] else: # decision_function 並不是 probability pred_score = svm_model.decision_function( features_scaled )[0] pred_prob = pred_score threshold = 0.5 # --------------------------------------------------- # Display Result # --------------------------------------------------- if pred_prob >= threshold: st.success( f"Prediction: Fever expected in the coming day " f"(Score/Probability={pred_prob:.3f} ≥ {threshold})" ) else: st.info( f"Prediction: No fever expected in the coming day " f"(Score/Probability={pred_prob:.3f} < {threshold})" ) except FileNotFoundError as e: st.error( f"Missing model file: {e.filename}" ) except Exception as e: st.error( f"Error loading scaler or model: {e}" ) # --------------------------------------------------- # Data Preview # --------------------------------------------------- st.subheader("🧾 Data Preview (Last 24h)") df_preview = df_24h.copy() df_preview["Date"] = ( df_preview["DateTime"] .dt.strftime("%Y-%m-%d") ) df_preview["Time"] = ( df_preview["DateTime"] .dt.strftime("%H:%M") ) # 溫度固定一位小數 df_preview["Temperature"] = ( df_preview["Temperature"] .map(lambda x: f"{x:.1f}") ) # --------------------------------------------------- # Highlight Abnormal Temperature # --------------------------------------------------- def highlight_temp(val): try: if float(val) < 35 or float(val) > 43: return "color: red; font-weight: bold" except Exception: pass return "" st.dataframe( df_preview[ ["Date", "Time", "Temperature"] ].style.map(highlight_temp), use_container_width=True ) else: st.info( "⬆️ Please enter temperatures manually to begin analysis." )
+import streamlit as st
+import pandas as pd
+import numpy as np
+from datetime import datetime, timedelta
+from sklearn.linear_model import LinearRegression
+import joblib
+
+
+# ---------------------------------------------------
+# Title
+# ---------------------------------------------------
+st.title("📈 Fever Prediction in Children")
+
+st.markdown("""
+This app uses temperature records from **08:00 of the previous day
+to 08:00 of the last day** to predict whether fever may occur in the coming day.
+
+**Input:** Enter temperatures manually in the table below.
+
+**Disclaimer:**  
+The prediction results are for research and informational purposes only.
+They should not be considered medical advice or a substitute for professional
+medical judgment.
+""")
+
+
+# ---------------------------------------------------
+# Manual Entry
+# ---------------------------------------------------
+st.subheader("Manual Data Entry")
+
+times = (
+    [f"{h:02d}:00" for h in range(8, 24)] +
+    [f"{h:02d}:00" for h in range(0, 8)]
+)
+
+days = (
+    ["Day1"] * 16 +
+    ["Day2"] * 8
+)
+
+manual_df = pd.DataFrame({
+    "Day": days,
+    "Time": times,
+    "Temperature": np.nan
+})
+
+edited_df = st.data_editor(
+    manual_df,
+    use_container_width=True
+)
+
+edited_df = edited_df.dropna(
+    subset=["Temperature"]
+)
+
+
+# ---------------------------------------------------
+# Prediction
+# ---------------------------------------------------
+if len(edited_df) > 0:
+
+    df = edited_df.copy()
+
+    today = datetime.today().replace(
+        hour=0,
+        minute=0,
+        second=0,
+        microsecond=0
+    )
+
+    def make_datetime(row):
+        if row["Day"] == "Day1":
+            date = today - timedelta(days=1)
+        else:
+            date = today
+
+        hour = int(row["Time"][:2])
+        minute = int(row["Time"][3:])
+
+        return date + timedelta(
+            hours=hour,
+            minutes=minute
+        )
+
+    df["DateTime"] = df.apply(
+        make_datetime,
+        axis=1
+    )
+
+    df["Temperature"] = pd.to_numeric(
+        df["Temperature"]
+    )
+
+    df = df.sort_values(
+        "DateTime"
+    ).reset_index(drop=True)
+
+
+    # ---------------------------------------------------
+    # Last 24 Hours
+    # ---------------------------------------------------
+    end_time = today + timedelta(hours=8)
+    start_time = end_time - timedelta(hours=24)
+
+    df = df[
+        (df["DateTime"] >= start_time) &
+        (df["DateTime"] <= end_time)
+    ].copy()
+
+
+    if len(df) < 2:
+
+        st.warning(
+            "Please enter at least 2 temperature measurements."
+        )
+
+    else:
+
+        # ---------------------------------------------------
+        # Features
+        # ---------------------------------------------------
+        df["Hours"] = (
+            df["DateTime"] - df["DateTime"].min()
+        ).dt.total_seconds() / 3600
+
+        max_bt = df["Temperature"].max()
+        min_bt = df["Temperature"].min()
+        mean_bt = df["Temperature"].mean()
+        std_bt = df["Temperature"].std()
+
+        X = df["Hours"].values.reshape(-1, 1)
+        y = df["Temperature"].values
+
+        slope = LinearRegression().fit(
+            X, y
+        ).coef_[0]
+
+        last_time = df["Hours"].max()
+
+        last_8h = df[
+            df["Hours"] >= last_time - 8
+        ]
+
+        max_last8 = last_8h["Temperature"].max()
+
+        range_bt = max_bt - min_bt
+
+        diff_last8_allmax = (
+            max_last8 - max_bt
+        )
+
+        features = [
+            max_bt,
+            min_bt,
+            mean_bt,
+            std_bt,
+            slope,
+            range_bt,
+            max_last8,
+            diff_last8_allmax
+        ]
+
+
+        # ---------------------------------------------------
+        # Model
+        # ---------------------------------------------------
+        try:
+
+            scaler = joblib.load("scaler.pkl")
+            model = joblib.load("svm_model.pkl")
+
+            features_scaled = scaler.transform(
+                np.array(features).reshape(1, -1)
+            )
+
+            if hasattr(model, "predict_proba"):
+
+                probability = model.predict_proba(
+                    features_scaled
+                )[0][1]
+
+            else:
+
+                probability = model.decision_function(
+                    features_scaled
+                )[0]
+
+            st.subheader("🤖 Prediction Result")
+
+            if probability >= 0.5:
+
+                st.success(
+                    f"Fever expected in the coming day "
+                    f"(Score = {probability:.3f})"
+                )
+
+            else:
+
+                st.info(
+                    f"No fever expected in the coming day "
+                    f"(Score = {probability:.3f})"
+                )
+
+
+        except Exception as e:
+
+            st.error(
+                f"Model error: {e}"
+            )
+
+
+        # ---------------------------------------------------
+        # Data
+        # ---------------------------------------------------
+        st.subheader("🧾 Temperature Data")
+
+        show_df = df.copy()
+
+        show_df["Date"] = (
+            show_df["DateTime"]
+            .dt.strftime("%Y-%m-%d")
+        )
+
+        show_df["Time"] = (
+            show_df["DateTime"]
+            .dt.strftime("%H:%M")
+        )
+
+        show_df["Temperature"] = (
+            show_df["Temperature"]
+            .round(1)
+        )
+
+        st.dataframe(
+            show_df[
+                ["Date", "Time", "Temperature"]
+            ],
+            use_container_width=True
+        )
+
+else:
+
+    st.info(
+        "Please enter temperature values above."
+    )
