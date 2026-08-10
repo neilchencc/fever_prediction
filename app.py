@@ -1,4 +1,3 @@
-```python
 import streamlit as st
 import pandas as pd
 import numpy as np
@@ -746,5 +745,3 @@ else:
         "⬆️ Please enter the child's temperature data "
         "and press **Start Prediction** to begin the analysis."
     )
-```
-
