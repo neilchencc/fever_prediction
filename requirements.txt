@@ -2,6 +2,6 @@ streamlit
 pandas
 numpy
 matplotlib
-scikit-learn==1.6.1
+scikit_learn==1.6.1
 joblib
-streamlit-aggrid
+
