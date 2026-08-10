@@ -1,3 +1,4 @@
+```python
 import streamlit as st
 import pandas as pd
 import numpy as np
@@ -198,7 +199,6 @@ if start_prediction:
         )
 
 
-        # Sort by DateTime
         edited_df = edited_df.sort_values(
             "DateTime"
         ).reset_index(drop=True)
@@ -255,10 +255,6 @@ if start_prediction:
             # Data Quality Check
             # =================================================
 
-            # -------------------------------------------------
-            # Consecutive measurement interval
-            # -------------------------------------------------
-
             time_diffs = (
                 df_24h["DateTime"]
                 .diff()
@@ -314,19 +310,12 @@ if start_prediction:
             # Features
             # =================================================
 
-            # Maximum body temperature
             max_bt = df_24h["Temperature"].max()
 
-
-            # Minimum body temperature
             min_bt = df_24h["Temperature"].min()
 
-
-            # Mean body temperature
             mean_bt = df_24h["Temperature"].mean()
 
-
-            # Standard deviation
             std_bt = df_24h["Temperature"].std()
 
             if pd.isna(std_bt):
@@ -360,7 +349,6 @@ if start_prediction:
             # Last 8 Hours
             #
             # Fixed definition:
-            #
             # Day2 00:00 → Day2 08:00
             #
             # Actual measurement points:
@@ -456,40 +444,6 @@ if start_prediction:
             else:
 
                 # =================================================
-                # Display Features
-                # =================================================
-
-                st.subheader(
-                    "📊 Calculated Features"
-                )
-
-
-                feature_names = [
-                    "Maximum temperature",
-                    "Minimum temperature",
-                    "Mean temperature",
-                    "Temperature SD",
-                    "Temperature slope",
-                    "Temperature range",
-                    "Maximum temperature in last 8h",
-                    "Last 8h max - overall max"
-                ]
-
-
-                feature_df = pd.DataFrame({
-                    "Feature": feature_names,
-                    "Value": features
-                })
-
-
-                st.dataframe(
-                    feature_df,
-                    use_container_width=True,
-                    hide_index=True
-                )
-
-
-                # =================================================
                 # SVM Prediction
                 # =================================================
 
@@ -543,16 +497,6 @@ if start_prediction:
 
                     # ------------------------------------------------
                     # Fever probability
-                    #
-                    # Model:
-                    # SVC(
-                    #     C=100,
-                    #     class_weight="balanced",
-                    #     gamma="scale",
-                    #     kernel="rbf",
-                    #     probability=True,
-                    #     shrinking=True
-                    # )
                     # ------------------------------------------------
 
                     pred_prob = svm_model.predict_proba(
@@ -571,28 +515,54 @@ if start_prediction:
 
                     if prediction == 1:
 
-                        st.success(
-                            "🌡️ **Prediction: Fever expected "
-                            "in the coming day**"
+                        result_text = (
+                            "🌡️ Prediction: Fever expected "
+                            "in the coming day"
                         )
+
+                        result_color = "#b91c1c"
 
                     else:
 
-                        st.info(
-                            "✅ **Prediction: No fever expected "
-                            "in the coming day**"
+                        result_text = (
+                            "✅ Prediction: No fever expected "
+                            "in the coming day"
                         )
 
+                        result_color = "#15803d"
 
-                    # ------------------------------------------------
-                    # Probability
-                    # ------------------------------------------------
 
-                    st.metric(
-                        label="Fever Probability",
-                        value=f"{pred_prob:.1%}"
+                    # -------------------------------------------------
+                    # Large Prediction + Probability
+                    # -------------------------------------------------
+
+                    st.markdown(
+                        f"""
+                        <div style="
+                            font-size: 28px;
+                            font-weight: 700;
+                            color: {result_color};
+                            margin-top: 10px;
+                            margin-bottom: 18px;
+                            line-height: 1.5;
+                        ">
+                            {result_text}
+                            <span style="
+                                margin-left: 25px;
+                                font-size: 26px;
+                                font-weight: 700;
+                            ">
+                                Probability: {pred_prob:.1%}
+                            </span>
+                        </div>
+                        """,
+                        unsafe_allow_html=True
                     )
 
+
+                    # -------------------------------------------------
+                    # Probability Bar
+                    # -------------------------------------------------
 
                     st.progress(
                         min(
@@ -606,7 +576,7 @@ if start_prediction:
 
 
                     st.caption(
-                        f"SVM predicted probability of fever: "
+                        f"SVM predicted probability: "
                         f"{pred_prob:.3f}"
                     )
 
@@ -627,78 +597,6 @@ if start_prediction:
                     st.error(
                         f"❌ Error loading scaler or SVM model: {e}"
                     )
-
-
-                # =================================================
-                # Data Preview
-                # =================================================
-
-                st.subheader(
-                    "🧾 Data Preview (Last 24h)"
-                )
-
-
-                df_preview = df_24h.copy()
-
-
-                df_preview["Date"] = (
-                    df_preview["DateTime"]
-                    .dt.strftime("%Y-%m-%d")
-                )
-
-
-                df_preview["Time"] = (
-                    df_preview["DateTime"]
-                    .dt.strftime("%H:%M")
-                )
-
-
-                df_preview["Temperature"] = (
-                    df_preview["Temperature"]
-                    .map(
-                        lambda x: f"{x:.1f}"
-                    )
-                )
-
-
-                # ------------------------------------------------
-                # Highlight abnormal temperature
-                # ------------------------------------------------
-
-                def highlight_temp(val):
-
-                    try:
-
-                        if (
-                            float(val) < 35
-                            or
-                            float(val) > 43
-                        ):
-
-                            return (
-                                "color: red; "
-                                "font-weight: bold"
-                            )
-
-                    except Exception:
-
-                        pass
-
-                    return ""
-
-
-                st.dataframe(
-                    df_preview[
-                        [
-                            "Date",
-                            "Time",
-                            "Temperature"
-                        ]
-                    ].style.map(
-                        highlight_temp
-                    ),
-                    use_container_width=True
-                )
 
 
                 # =================================================
@@ -839,7 +737,7 @@ if start_prediction:
 
 
 # ============================================================
-# No Prediction Yet
+# Before Prediction
 # ============================================================
 
 else:
@@ -848,3 +746,5 @@ else:
         "⬆️ Please enter the child's temperature data "
         "and press **Start Prediction** to begin the analysis."
     )
+```
+
