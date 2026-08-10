@@ -293,6 +293,7 @@ if start_prediction:
             # Additional Features
             # ---------------------------------------------------
 
+
             range_bt = max_bt - min_bt
 
             diff_last8_allmax = (
