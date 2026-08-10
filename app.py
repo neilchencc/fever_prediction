@@ -1,3 +1,4 @@
+```python
 import streamlit as st
 import pandas as pd
 import numpy as np
@@ -114,7 +115,7 @@ start_prediction = st.button(
 
 
 # ============================================================
-# Start Prediction
+# Prediction
 # ============================================================
 
 if start_prediction:
@@ -141,7 +142,10 @@ if start_prediction:
 
     else:
 
+        # ----------------------------------------------------
         # Make sure temperature is numeric
+        # ----------------------------------------------------
+
         edited_df["Temperature"] = pd.to_numeric(
             edited_df["Temperature"],
             errors="coerce"
@@ -152,9 +156,9 @@ if start_prediction:
         ).copy()
 
 
-        # --------------------------------------------------------
-        # Define Day1 / Day2 dates
-        # --------------------------------------------------------
+        # ====================================================
+        # Define Day1 / Day2
+        # ====================================================
 
         today = datetime.today().replace(
             hour=0,
@@ -167,9 +171,9 @@ if start_prediction:
         day2_date = today
 
 
-        # --------------------------------------------------------
+        # ====================================================
         # Create DateTime
-        # --------------------------------------------------------
+        # ====================================================
 
         def create_datetime(row):
 
@@ -179,11 +183,8 @@ if start_prediction:
             ).time()
 
             if row["Day"] == "Day1":
-
                 date_value = day1_date
-
             else:
-
                 date_value = day2_date
 
             return datetime.combine(
@@ -204,19 +205,20 @@ if start_prediction:
         ).reset_index(drop=True)
 
 
-        # ========================================================
-        # Define Fixed 24-hour Observation Period
+        # ====================================================
+        # Fixed 24-hour Observation Period
+        #
         # Day1 08:00 → Day2 08:00
-        # ========================================================
+        # ====================================================
+
+        start_time = today - timedelta(hours=16)
 
         end_time = today + timedelta(hours=8)
 
-        start_time = end_time - timedelta(hours=24)
 
-
-        # --------------------------------------------------------
-        # Select the 24-hour observation period
-        # --------------------------------------------------------
+        # ====================================================
+        # Select observation period
+        # ====================================================
 
         df_24h = edited_df[
             (edited_df["DateTime"] >= start_time)
@@ -229,9 +231,9 @@ if start_prediction:
         ).reset_index(drop=True)
 
 
-        # ========================================================
-        # Check whether data exists
-        # ========================================================
+        # ====================================================
+        # Check data
+        # ====================================================
 
         if df_24h.empty:
 
@@ -250,13 +252,13 @@ if start_prediction:
 
         else:
 
-            # ====================================================
-            # Data Quality Checks
-            # ====================================================
+            # =================================================
+            # Data Quality Check
+            # =================================================
 
-            # ----------------------------------------------------
+            # -------------------------------------------------
             # Consecutive measurement interval
-            # ----------------------------------------------------
+            # -------------------------------------------------
 
             time_diffs = (
                 df_24h["DateTime"]
@@ -279,9 +281,9 @@ if start_prediction:
                 )
 
 
-            # ----------------------------------------------------
+            # -------------------------------------------------
             # First-to-last measurement interval
-            # ----------------------------------------------------
+            # -------------------------------------------------
 
             total_duration = (
                 df_24h["DateTime"].max()
@@ -299,9 +301,9 @@ if start_prediction:
                 )
 
 
-            # ====================================================
+            # =================================================
             # Calculate Hours
-            # ====================================================
+            # =================================================
 
             df_24h["Hours"] = (
                 df_24h["DateTime"]
@@ -309,33 +311,32 @@ if start_prediction:
             ).dt.total_seconds() / 3600
 
 
-            # ====================================================
+            # =================================================
             # Features
-            # ====================================================
+            # =================================================
 
-            # Maximum temperature
+            # Maximum body temperature
             max_bt = df_24h["Temperature"].max()
 
 
-            # Minimum temperature
+            # Minimum body temperature
             min_bt = df_24h["Temperature"].min()
 
 
-            # Mean temperature
+            # Mean body temperature
             mean_bt = df_24h["Temperature"].mean()
 
 
             # Standard deviation
             std_bt = df_24h["Temperature"].std()
 
-            # Avoid NaN if only one valid measurement
             if pd.isna(std_bt):
                 std_bt = 0.0
 
 
-            # ====================================================
+            # =================================================
             # Temperature Slope
-            # ====================================================
+            # =================================================
 
             X = df_24h[
                 "Hours"
@@ -356,16 +357,16 @@ if start_prediction:
             slope = linear_model.coef_[0]
 
 
-            # ====================================================
+            # =================================================
             # Last 8 Hours
             #
-            # IMPORTANT:
-            # Last 8 hours = Day2 00:00 → Day2 08:00
+            # Fixed definition:
             #
-            # Therefore measurements at:
+            # Day2 00:00 → Day2 08:00
+            #
+            # Actual measurement points:
             # 00:00, 01:00, ..., 07:00
-            # are included.
-            # ====================================================
+            # =================================================
 
             last_8h_start = today
 
@@ -379,16 +380,16 @@ if start_prediction:
             ].copy()
 
 
-            # ----------------------------------------------------
-            # Check Last 8-hour data
-            # ----------------------------------------------------
+            # =================================================
+            # Check Last 8-hour Data
+            # =================================================
 
             if last_8h.empty:
 
-                st.warning(
-                    "⚠️ No temperature measurements were entered "
-                    "during the last 8-hour period "
-                    "(Day2 00:00–07:00)."
+                st.error(
+                    "❌ No temperature measurements were entered "
+                    "during Day2 00:00–07:00. "
+                    "The Last 8-hour features cannot be calculated."
                 )
 
                 max_last8 = np.nan
@@ -400,9 +401,9 @@ if start_prediction:
                 ].max()
 
 
-            # ====================================================
+            # =================================================
             # Additional Features
-            # ====================================================
+            # =================================================
 
             range_bt = (
                 max_bt
@@ -422,9 +423,9 @@ if start_prediction:
                 )
 
 
-            # ====================================================
+            # =================================================
             # Final 8 Features
-            # ====================================================
+            # =================================================
 
             features = [
                 max_bt,
@@ -438,9 +439,9 @@ if start_prediction:
             ]
 
 
-            # ====================================================
+            # =================================================
             # Check Features
-            # ====================================================
+            # =================================================
 
             if any(
                 pd.isna(x)
@@ -449,15 +450,15 @@ if start_prediction:
 
                 st.error(
                     "❌ Some required features could not be calculated. "
-                    "Please make sure temperature measurements are "
-                    "available during Day2 00:00–07:00."
+                    "Please make sure that temperature measurements "
+                    "are available during Day2 00:00–07:00."
                 )
 
             else:
 
-                # ==================================================
-                # Display Calculated Features
-                # ==================================================
+                # =================================================
+                # Display Features
+                # =================================================
 
                 st.subheader(
                     "📊 Calculated Features"
@@ -489,9 +490,9 @@ if start_prediction:
                 )
 
 
-                # ==================================================
-                # SVM Model Prediction
-                # ==================================================
+                # =================================================
+                # SVM Prediction
+                # =================================================
 
                 try:
 
@@ -514,7 +515,7 @@ if start_prediction:
 
 
                     # ------------------------------------------------
-                    # Convert features to numpy array
+                    # Convert features
                     # ------------------------------------------------
 
                     features_array = np.array(
@@ -524,7 +525,7 @@ if start_prediction:
 
 
                     # ------------------------------------------------
-                    # Standardization
+                    # Standardize features
                     # ------------------------------------------------
 
                     features_scaled = scaler.transform(
@@ -532,24 +533,28 @@ if start_prediction:
                     )
 
 
-                    # =================================================
-                    # Prediction
-                    # =================================================
+                    # ------------------------------------------------
+                    # SVM prediction
+                    # ------------------------------------------------
 
                     prediction = svm_model.predict(
                         features_scaled
                     )[0]
 
 
-                    # Your SVM was trained with:
+                    # ------------------------------------------------
+                    # Fever probability
                     #
-                    # C = 100
-                    # kernel = RBF
-                    # gamma = scale
-                    # class_weight = balanced
-                    # probability = True
-                    #
-                    # Therefore predict_proba() is available.
+                    # Model:
+                    # SVC(
+                    #     C=100,
+                    #     class_weight="balanced",
+                    #     gamma="scale",
+                    #     kernel="rbf",
+                    #     probability=True,
+                    #     shrinking=True
+                    # )
+                    # ------------------------------------------------
 
                     pred_prob = svm_model.predict_proba(
                         features_scaled
@@ -581,7 +586,7 @@ if start_prediction:
 
 
                     # ------------------------------------------------
-                    # Fever Probability
+                    # Probability
                     # ------------------------------------------------
 
                     st.metric(
@@ -607,9 +612,9 @@ if start_prediction:
                     )
 
 
-                # ==================================================
+                # =================================================
                 # Error Handling
-                # ==================================================
+                # =================================================
 
                 except FileNotFoundError as e:
 
@@ -625,9 +630,9 @@ if start_prediction:
                     )
 
 
-                # ==================================================
+                # =================================================
                 # Data Preview
-                # ==================================================
+                # =================================================
 
                 st.subheader(
                     "🧾 Data Preview (Last 24h)"
@@ -649,7 +654,6 @@ if start_prediction:
                 )
 
 
-                # Format temperature
                 df_preview["Temperature"] = (
                     df_preview["Temperature"]
                     .map(
@@ -698,9 +702,9 @@ if start_prediction:
                 )
 
 
-                # ==================================================
+                # =================================================
                 # Temperature Trend
-                # ==================================================
+                # =================================================
 
                 st.subheader(
                     "📉 Temperature Trend (Last 24h)"
@@ -708,20 +712,28 @@ if start_prediction:
 
 
                 fig, ax = plt.subplots(
-                    figsize=(10, 5)
+                    figsize=(14, 5)
                 )
 
+
+                # -------------------------------------------------
+                # Temperature line
+                # -------------------------------------------------
 
                 ax.plot(
                     df_24h["DateTime"],
                     df_24h["Temperature"],
                     marker="o",
                     linewidth=2,
+                    markersize=6,
                     label="Temperature"
                 )
 
 
+                # -------------------------------------------------
                 # Fever threshold
+                # -------------------------------------------------
+
                 ax.axhline(
                     y=38,
                     color="darkred",
@@ -731,15 +743,60 @@ if start_prediction:
                 )
 
 
-                # Highlight Last 8 hours
-                ax.axvspan(
-                    today,
-                    today + timedelta(hours=8),
-                    color="orange",
-                    alpha=0.15,
-                    label="Last 8h (00:00–08:00)"
+                # =================================================
+                # X-axis
+                #
+                # Day1 08:00
+                # Day1 09:00
+                # ...
+                # Day1 23:00
+                # Day2 00:00
+                # ...
+                # Day2 07:00
+                # Day2 08:00
+                # =================================================
+
+                hourly_times = pd.date_range(
+                    start=start_time,
+                    end=end_time,
+                    freq="1h"
                 )
 
+
+                hourly_labels = []
+
+
+                for t in hourly_times:
+
+                    if t.date() == day1_date.date():
+
+                        day_label = "Day1"
+
+                    else:
+
+                        day_label = "Day2"
+
+
+                    hourly_labels.append(
+                        f"{day_label} {t.strftime('%H:%M')}"
+                    )
+
+
+                ax.set_xticks(
+                    hourly_times
+                )
+
+
+                ax.set_xticklabels(
+                    hourly_labels,
+                    rotation=45,
+                    ha="right"
+                )
+
+
+                # -------------------------------------------------
+                # Y-axis
+                # -------------------------------------------------
 
                 ax.set_ylim(
                     35,
@@ -757,22 +814,39 @@ if start_prediction:
                 )
 
 
+                # -------------------------------------------------
+                # Grid
+                # -------------------------------------------------
+
                 ax.grid(
                     True,
+                    which="major",
+                    axis="both",
                     alpha=0.3
                 )
 
 
+                # -------------------------------------------------
+                # Legend
+                # -------------------------------------------------
+
                 ax.legend()
-
-
-                plt.xticks(
-                    rotation=45,
-                    ha="left"
-                )
 
 
                 plt.tight_layout()
 
 
                 st.pyplot(fig)
+
+
+# ============================================================
+# No Prediction Yet
+# ============================================================
+
+else:
+
+    st.info(
+        "⬆️ Please enter the child's temperature data "
+        "and press **Start Prediction** to begin the analysis."
+    )
+```
