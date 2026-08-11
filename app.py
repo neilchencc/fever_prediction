@@ -552,26 +552,7 @@ if start_prediction:
                     )
 
 
-                    # -------------------------------------------------
-                    # Probability Bar
-                    # -------------------------------------------------
-
-                    st.progress(
-                        min(
-                            max(
-                                float(pred_prob),
-                                0.0
-                            ),
-                            1.0
-                        )
-                    )
-
-
-                    st.caption(
-                        f"SVM predicted probability: "
-                        f"{pred_prob:.3f}"
-                    )
-
+                   
 
                 # =================================================
                 # Error Handling
