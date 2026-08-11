@@ -508,7 +508,7 @@ if start_prediction:
                     if prediction == 1:
 
                         result_text = (
-                            "🌡️ Prediction: Fever expected "
+                            "Prediction: Fever expected "
                             "in the coming day"
                         )
 
@@ -517,7 +517,7 @@ if start_prediction:
                     else:
 
                         result_text = (
-                            "✅ Prediction: No fever expected "
+                            "Prediction: No fever expected "
                             "in the coming day"
                         )
 
