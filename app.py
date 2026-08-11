@@ -581,7 +581,7 @@ if start_prediction:
 
 
                 fig, ax = plt.subplots(
-                    figsize=(14, 10)
+                    figsize=(14, 5)
                 )
 
 
