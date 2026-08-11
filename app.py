@@ -22,13 +22,6 @@ to 08:00 of the current day** to predict whether a fever may occur in the coming
 Enter body temperatures directly in the table below, then press
 **"Start Prediction"** to perform the prediction.
 
-**Time Period:**  
-- **Day1:** Previous day, 08:00–23:00
-- **Day2:** Current day, 00:00–07:00
-- **Observation period:** Day1 08:00 → Day2 08:00
-- **Last 8 hours:** Day2 00:00 → Day2 08:00
-  (temperature measurements recorded at 00:00–07:00)
-
 **Note:**  
 (1) The interval between any two consecutive temperature measurements
 should not exceed 8 hours.
