@@ -581,7 +581,8 @@ if start_prediction:
 
 
                 fig, ax = plt.subplots(
-                    figsize=(14, 5)
+                    figsize=(14, 5),
+                    dpi=1200
                 )
 
 
@@ -705,7 +706,7 @@ if start_prediction:
                 plt.tight_layout()
 
 
-                st.pyplot(fig)
+                st.pyplot(fig, dpi=1200)
 
 
 # ============================================================
